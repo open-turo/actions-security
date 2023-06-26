@@ -29,5 +29,3 @@ jobs:
       - uses: open-turo/actions-gha/release@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          extra-plugins: |
-            @open-turo/semantic-release-config@^1.4.0
