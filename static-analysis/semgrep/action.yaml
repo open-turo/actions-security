@@ -12,6 +12,7 @@ runs:
     - ci
   env:
     SEMGREP_APP_TOKEN: ${{ inputs.semgrep-app-token }}
-  steps:
-    - run: echo "pausing checks"
-      shell: bash
+
+steps:
+  - run: echo "pausing checks"
+    shell: bash
