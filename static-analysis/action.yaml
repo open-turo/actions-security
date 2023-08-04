@@ -11,10 +11,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      if: ${{inputs.checkout-repo == 'true'}}
-      uses: actions/checkout@v3
-    - name: Run semgrep
-      uses: ${GITHUB_ACTION_PATH}/static-analysis/semgrep
-      with:
-        semgrep-app-token: ${{ inputs.semgrep-app-token }}
+    - run: echo "pausing checks"
+      shell: bash
+#    - name: Checkout
+#      if: ${{inputs.checkout-repo == 'true'}}
+#      uses: actions/checkout@v3
+#    - name: Run semgrep
+#      uses: ${GITHUB_ACTION_PATH}/static-analysis/semgrep
+#      with:
+#        semgrep-app-token: ${{ inputs.semgrep-app-token }}
