@@ -1,4 +1,4 @@
-# GitHub Action Static Analysis Preview
+# GitHub Action Static Security Scan Analysis
 
 ## Description
 
@@ -16,29 +16,23 @@ Step 3: Add a [Workflow File](https://help.github.com/en/articles/workflow-synta
 
 ```yaml
 # Name of this GitHub Actions workflow.
-name: Static code analysis using Semgrep
+name: Security Scan
 
 on:
-  # Scan changed files in PRs (diff-aware scanning):
   pull_request: {}
-  # Scan on-demand through GitHub Actions interface:
   workflow_dispatch: {}
-  # Scan mainline branches and report all findings:
   push:
     branches: ["master", "main"]
-  # [optional] Schedule the CI job (this method uses cron syntax):
   schedule:
     - cron: "20 17 * * *" # Sets Semgrep to scan every day at 17:20 UTC.
     # It is recommended to change the schedule to a random time.
 
 jobs:
   static-code-anaylsis:
-    # User definable name of this GitHub Actions job.
-    name: Static code analysis using Semgrep
+    name: Security scan
     steps:
-      # Fetch project source with GitHub Actions Checkout.
-      - uses: actions/checkout@v3
-      - uses: open-turo/security-actions/static-code-analysis@v1
+      - uses: actions/checkout@v4
+      - uses: open-turo/security-actions/static-code-analysis@v2
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
 ```
@@ -60,4 +54,4 @@ N/A
 
 ## Notes
 
-N/A
+- By default, this action will perform actions/checkout as its first step.
