@@ -1,0 +1,92 @@
+name: "Security Scan Composite Action"
+description: "GitHub Action for scanning container image for vulnerabilities using Lacework"
+
+inputs:
+  docker-config-file:
+    required: false
+    description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    default: .docker-config.json
+  github-token:
+    required: true
+    description: GitHub token
+  lw-account-name:
+    required: true
+    description: Lacework account name
+  lw-access-token:
+    required: true
+    description: Lacework access token
+  image-tag:
+    required: true
+    description: Docker image tag
+
+outputs:
+  comment-id:
+    description: Comment ID of the test report
+    value: ${{ steps.comment-pr.outputs.comment-id }}
+  image-name:
+    description: Docker image name
+    value: ${{ steps.config.outputs.image-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Extract docker image image
+    - id: config
+      shell: bash
+      run: | # if docker-config file does not exist - fail
+        if [ ! -f "${{ inputs.docker-config-file }}" ]; then
+          echo "::error::Docker config file not found: ${{ inputs.docker-config-file }}" && exit 1
+        fi
+        image_name=$(jq -r .imageName ${{ inputs.docker-config-file }})
+        echo "image-name: ${image_name}"
+        echo "image-name=${image_name}" >> $GITHUB_OUTPUT
+    - name: Scan container image for vulnerabilities using Lacework
+      uses: lacework/lw-scanner-action@v1.4.0
+      with:
+        LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
+        LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
+        IMAGE_NAME: ${{ steps.config.outputs.image-name }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        SAVE_RESULTS_IN_LACEWORK: true
+        RESULTS_IN_GITHUB_SUMMARY: true
+        PRETTY_OUTPUT: true
+
+    - name: Change formatting for PR
+      if: always()
+      run: |
+        echo "# Lacework Inline Scanner Results" > pr-results.md
+        echo "<pre>" >> pr-results.md
+        cat results.stdout >> pr-results.md
+        echo "</pre>" >> pr-results.md
+      shell: bash
+
+    - name: Check for previous report comment
+      id: fc
+      uses: peter-evans/find-comment@v1
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: "github-actions[bot]"
+        body-includes: "Lacework Inline Scanner Results"
+
+    - name: Delete previous test report comment
+      if: steps.fc.outputs.comment-id != ''
+      uses: jungwinter/comment@v1
+      with:
+        type: delete
+        comment_id: ${{ steps.fc.outputs.comment-id }}
+        token: ${{ inputs.github-token }}
+
+    - name: Comment PR
+      if: always()
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        filePath: pr-results.md
+
+    - name: Cleanup docker image
+      if: always()
+      run: |
+        docker image rm ${{ steps.config.outputs.image-name }}:${{ inputs.image-tag }}
+      shell: bash
