@@ -34,7 +34,7 @@ runs:
       uses: actions/checkout@v4
 
     - name: Extract docker image image
-    - id: config
+      id: config
       shell: bash
       run: | # if docker-config file does not exist - fail
         if [ ! -f "${{ inputs.docker-config-file }}" ]; then
