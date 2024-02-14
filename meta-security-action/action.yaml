@@ -1,0 +1,25 @@
+name: "Meta Security Scan"
+description: "Run static analysis and container scan as a combined action"
+inputs:
+  enableStaticAnalysis:
+    description: "Enable static analysis"
+    required: false
+    default: "true"
+  enableContainerScan:
+    description: "Enable container scan"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Static Analysis
+      if: inputs.enableStaticAnalysis == 'true'
+      uses: ./static-analysis
+
+    - name: Container Scan
+      if: inputs.enableContainerScan == 'true'
+      uses: ./container-scan
