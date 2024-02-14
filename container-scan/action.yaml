@@ -65,11 +65,11 @@ runs:
 
     - name: Check for previous report comment
       id: fc
-      uses: peter-evans/find-comment@v1
+      uses: peter-evans/find-comment@v3
       with:
         issue-number: ${{ github.event.pull_request.number }}
         comment-author: "github-actions[bot]"
-        body-includes: "Lacework Inline Scanner Results"
+        body-includes: Lacework Inline Scanner Results
 
     - name: Delete previous test report comment
       if: steps.fc.outputs.comment-id != ''
