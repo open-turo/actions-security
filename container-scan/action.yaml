@@ -33,7 +33,7 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Extract docker image image
+    - name: Extract docker image name
       id: config
       shell: bash
       run: | # if docker-config file does not exist - fail
@@ -43,8 +43,9 @@ runs:
         image_name=$(jq -r .imageName ${{ inputs.docker-config-file }})
         echo "image-name: ${image_name}"
         echo "image-name=${image_name}" >> $GITHUB_OUTPUT
+
     - name: Scan container image for vulnerabilities using Lacework
-      uses: lacework/lw-scanner-action@v1.4.0
+      uses: lacework/lw-scanner-action@v1.4.1
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
@@ -57,23 +58,25 @@ runs:
     - name: Change formatting for PR
       if: always()
       run: |
-        echo "# Lacework Inline Scanner Results" > pr-results.md
+        echo "<details><summary>Lacework Inline Scanner Results</summary>" > pr-results.md
         echo "<pre>" >> pr-results.md
         cat results.stdout >> pr-results.md
         echo "</pre>" >> pr-results.md
+        echo "</details>" >> pr-results.md
       shell: bash
 
     - name: Check for previous report comment
       id: fc
+      if: github.event.pull_request.number != ''
       uses: peter-evans/find-comment@v1
       with:
         issue-number: ${{ github.event.pull_request.number }}
         comment-author: "github-actions[bot]"
-        body-includes: "Lacework Inline Scanner Results"
+        body-includes: "<!-- lacework inline scanner results comment -->"
 
     - name: Delete previous test report comment
       if: steps.fc.outputs.comment-id != ''
-      uses: jungwinter/comment@v1
+      uses: winterjung/comment@v1
       with:
         type: delete
         comment_id: ${{ steps.fc.outputs.comment-id }}
