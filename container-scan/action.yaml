@@ -81,7 +81,7 @@ runs:
       id: set_image_name
       run: |
         if [ "${{ inputs.enable-docker-build }}" == "true" ]; then
-          echo "::set-output name=image_name::${{ steps.build-docker.outputs.image-name }}"
+          echo "::set-output name=image_name::${{ steps.docker-build.outputs.image-name }}"
         else
           echo "::set-output name=image_name::${{ inputs.image-name }}"
         fi
@@ -148,5 +148,5 @@ runs:
     - name: Cleanup docker image
       if: always()
       run: |
-        docker image rm ${{ steps.build-docker.outputs.image-name }}:${{ inputs.image-tag }}
+        docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }}
       shell: bash
