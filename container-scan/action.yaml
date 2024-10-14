@@ -115,7 +115,7 @@ runs:
         echo "## Lacework Inline Scanner Results" > pr-results.md
         echo "<details><summary>Click to expand</summary>" >> pr-results.md
         echo "<pre>" >> pr-results.md
-        cat results.stdout >> pr-results.md
+        tail -n +1 results.stdout >> pr-results.md
         echo "</pre>" >> pr-results.md
         echo "</details>" >> pr-results.md
       shell: bash
