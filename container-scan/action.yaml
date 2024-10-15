@@ -69,7 +69,7 @@ runs:
         image-version: ${{ inputs.image-tag }}
         image-platform: ${{ inputs.image-platform }}
         load: true
-        push: false
+        push: true
         docker-metadata-tags: |
           type=ref,event=branch
           type=ref,event=pr
