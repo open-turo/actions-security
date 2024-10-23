@@ -40,8 +40,10 @@ To use this action in your GitHub Actions workflow, include the following steps:
 | image-tag | Docker image tag | `true` |  |
 | image-platform | Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc) | `false` | linux/amd64 |
 | build-args | List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE) | `false` |  |
+| build-contexts | List of additional build contexts (e.g., name=path) | `false` |  |
 | secrets | List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE) | `false` |  |
 | enable-docker-build | Docker image tag | `false` | true |
+| image-tags | List of tags as key-value pair attributes | `false` |  |
 <!-- action-docs-inputs -->
 
 <!-- action-docs-outputs -->
