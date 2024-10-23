@@ -51,9 +51,9 @@ steps:
         type=semver,pattern={{version}},value=${{ steps.release.outputs.new-release-version }}
 ```
 
-#### Dynamically input multiple build arguments and secrets:
+#### Dynamically input multiple build arguments, contexts and secrets:
 
-If you want to pass multiple build arguments and secrets, you can use the `build-args` and `secrets` input parameters.
+If you want to pass multiple build arguments and secrets, you can use the `build-args`, `build-contexts` and `secrets` input parameters.
 
 ```yaml
 steps:
@@ -71,9 +71,15 @@ steps:
       dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
       github-token: ${{ secrets.GITHUB_TOKEN }}
       image-version: ${{ steps.release.outputs.new-release-version }}
+      image-tags: |
+        tag1=value1
+        tag2=value2
       build-args: |
         KEY1=VALUE1
         KEY2=VALUE2
+      build-contexts: |
+        context1=PATH1
+        context2=PATH2
       secrets: |
         SECRET_KEY1=SECRET_VALUE1
         SECRET_KEY2=SECRET_VALUE2
@@ -98,7 +104,9 @@ steps:
 | push                 | Do you want to push the image to the registry                                                                    | `false`  | false               |
 | load                 | Do you want to load the single-platform build result to docker images                                            | `false`  | true                |
 | build-args           | List of build arguments as key-value pairs (e.g., KEY=VALUE)                                                     | `false`  |                     |
+| build-contexts       | List of additional build contexts (e.g., name=path)                                                              | `false`  |                     |
 | secrets              | List of secrets as key-value pairs (e.g., SECRET_KEY=VALUE)                                                      | `false`  |                     |
+| image-tags           | List of tags as key-value pair attributes                                                                        | `false`  |                     |
 
 ## Outputs
 

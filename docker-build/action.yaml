@@ -37,10 +37,19 @@ inputs:
     required: false
     description: List of build arguments as key-value pairs (e.g., KEY=VALUE)
     default: ""
+  build-contexts:
+    required: false
+    description: List of additional build contexts (e.g., name=path)
+    default: ""
   secrets:
     required: false
     description: List of secrets as key-value pairs (e.g., SECRET_KEY=VALUE)
     default: ""
+  image-tags:
+    required: false
+    description: List of tags as key-value pair attributes
+    default: ""
+
 outputs:
   image-name:
     description: Docker image name
@@ -113,5 +122,5 @@ runs:
         load: ${{ inputs.load }}
         tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version }}
         labels: ${{ steps.meta.outputs.labels }}
-        secrets: |
-          ${{ inputs.secrets }}
+        secrets: ${{ inputs.secrets }}
+        build-contexts: ${{ inputs.build-contexts }}

@@ -33,10 +33,13 @@ inputs:
     description: Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
     required: false
     default: linux/amd64
-
   build-args:
     required: false
     description: List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE)
+    default: ""
+  build-contexts:
+    required: false
+    description: List of additional build contexts (e.g., name=path)
     default: ""
   secrets:
     required: false
@@ -46,6 +49,10 @@ inputs:
     required: false
     default: true
     description: Docker image tag
+  image-tags:
+    required: false
+    description: List of tags as key-value pair attributes
+    default: ""
 
 outputs:
   comment-id:
@@ -60,7 +67,7 @@ runs:
 
     - name: Build docker image
       if: ${{ inputs.enable-docker-build }}
-      uses: open-turo/actions-security/docker-build@v2
+      uses: open-turo/actions-security/docker-build@c/support_build_contexts
       id: docker-build
       with:
         dockerhub-user: ${{ inputs.dockerhub-user }}
@@ -74,6 +81,7 @@ runs:
           type=ref,event=branch
           type=ref,event=pr
         build-args: ${{ inputs.build-args }}
+        build-contexts: ${{ inputs.build-contexts }}
         secrets: ${{ inputs.secrets }}
 
     - name: "Determining image name"
