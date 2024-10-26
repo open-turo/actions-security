@@ -1,99 +1,168 @@
 # GitHub Action Container-Scan
 
 <!-- prettier-ignore-start -->
-<!-- action-docs-description -->
+<!-- action-docs-description source="action.yaml" -->
 ## Description
 
 GitHub Action for scanning container image for vulnerabilities using Lacework
-<!-- action-docs-description -->
-<!-- prettier-ignore-end -->
+<!-- action-docs-description source="action.yaml" -->
+
+<!-- action-docs-usage source="action.yaml" -->
+## Usage
+
+```yaml
+- uses: @
+  with:
+    dockerhub-user:
+    # username for dockerhub
+    #
+    # Required: false
+    # Default: ""
+
+    dockerhub-password:
+    # password for dockerhub
+    #
+    # Required: false
+    # Default: ""
+
+    docker-config-file:
+    # Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    #
+    # Required: false
+    # Default: .docker-config.json
+
+    github-token:
+    # GitHub token
+    #
+    # Required: true
+    # Default: ""
+
+    lw-account-name:
+    # Lacework account name
+    #
+    # Required: true
+    # Default: ""
+
+    lw-access-token:
+    # Lacework access token
+    #
+    # Required: true
+    # Default: ""
+
+    image-name:
+    # Docker image name
+    #
+    # Required: false
+    # Default: ""
+
+    image-tag:
+    # Docker image tag
+    #
+    # Required: true
+    # Default: ""
+
+    image-platform:
+    # Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
+    #
+    # Required: false
+    # Default: linux/amd64
+
+    build-args:
+    # List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE)
+    #
+    # Required: false
+    # Default: ""
+
+    secrets:
+    # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
+    #
+    # Required: false
+    # Default: ""
+
+    enable-docker-build:
+    # Docker image tag
+    #
+    # Required: false
+    # Default: true
+```
+<!-- action-docs-usage source="action.yaml" -->
 
 ## Usage
 
-To use this action in your GitHub Actions workflow, include the following steps:
-
 ```yaml
-- name: Lacework Container Scan
-  uses: open-turo/actions-security/container-scan@v1 # Specify the path to the action in your repository
+- uses: @
   with:
-    dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-    dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-    lw-account-name: ${{ secrets.LW_ACCOUNT_NAME }}
-    lw-access-token: ${{ secrets.LW_ACCESS_TOKEN }}
-    github-token: <your-secret-for-github-token>
-    image-tag: <your-docker-image-tag>
+    dockerhub-user:
+    # username for dockerhub
+    #
+    # Required: false
+    # Default: ""
+
+    dockerhub-password:
+    # password for dockerhub
+    #
+    # Required: false
+    # Default: ""
+
+    docker-config-file:
+    # Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    #
+    # Required: false
+    # Default: .docker-config.json
+
+    github-token:
+    # GitHub token
+    #
+    # Required: true
+    # Default: ""
+
+    lw-account-name:
+    # Lacework account name
+    #
+    # Required: true
+    # Default: ""
+
+    lw-access-token:
+    # Lacework access token
+    #
+    # Required: true
+    # Default: ""
+
+    image-name:
+    # Docker image name
+    #
+    # Required: false
+    # Default: ""
+
+    image-tag:
+    # Docker image tag
+    #
+    # Required: true
+    # Default: ""
+
+    image-platform:
+    # Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
+    #
+    # Required: false
+    # Default: linux/amd64
+
+    build-args:
+    # List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE)
+    #
+    # Required: false
+    # Default: ""
+
+    secrets:
+    # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
+    #
+    # Required: false
+    # Default: ""
+
+    enable-docker-build:
+    # Docker image tag
+    #
+    # Required: false
+    # Default: true
 ```
 
-<!-- prettier-ignore-start -->
-<!-- action-docs-inputs -->
-## Inputs
-
-| parameter | description | required | default |
-| --- | --- | --- | --- |
-| dockerhub-user | username for dockerhub | `false` |  |
-| dockerhub-password | password for dockerhub | `false` |  |
-| docker-config-file | Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile | `false` | .docker-config.json |
-| github-token | GitHub token | `true` |  |
-| lw-account-name | Lacework account name | `true` |  |
-| lw-access-token | Lacework access token | `true` |  |
-| image-name | Docker image name | `false` |  |
-| image-tag | Docker image tag | `true` |  |
-| image-platform | Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc) | `false` | linux/amd64 |
-| build-args | List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE) | `false` |  |
-| secrets | List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE) | `false` |  |
-| enable-docker-build | Docker image tag | `false` | true |
-<!-- action-docs-inputs -->
-
-<!-- action-docs-outputs -->
-## Outputs
-
-| parameter | description |
-| --- | --- |
-| comment-id | Comment ID of the test report |
-<!-- action-docs-outputs -->
-
-<!-- action-docs-runs -->
-## Runs
-
-This action is a `composite` action.
-<!-- action-docs-runs -->
-
-<!-- action-docs-usage -->
 <!-- prettier-ignore-end -->
-
-# Example
-
-Here's an example of how to integrate this action into your workflow:
-
-```yaml
-name: Container Security Scan Workflow
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  container-scan:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Lacework Container Scan
-        uses: open-turo/actions-security/container-scan@v1 # Specify the path to the action in your repository
-        with:
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          lw-account-name: ${{ secrets.LW_ACCOUNT_NAME }}
-          lw-access-token: ${{ secrets.LW_ACCESS_TOKEN }}
-          github-token: <your-secret-for-github-token>
-          image-tag: <your-docker-image-tag>
-```
-
-## Notes
-
-- By default, this action will perform actions/checkout as its first step.
