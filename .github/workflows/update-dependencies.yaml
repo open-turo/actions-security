@@ -17,11 +17,9 @@ jobs:
   update-dependencies:
     runs-on: ubuntu-latest
     name: Update dependencies
-    # TODO: remove skip when this workflow is resumed in other actions
-    if: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - uses: ./
+        uses: actions/checkout@v4
+      - uses: open-turo/action-renovate@v1
         with:
           github-token: ${{ secrets.OPEN_TURO_GITHUB_TOKEN }}

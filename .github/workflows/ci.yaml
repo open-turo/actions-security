@@ -2,28 +2,25 @@ name: CI
 
 on:
   pull_request:
+  push:
     branches: [main]
-env:
-  BRANCH_NAME: ${{ github.ref }}
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: open-turo/actions-gha/lint@v1
+      - uses: open-turo/actions-gha/lint@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-  #test semgrep action working
-  action:
-    name: Test / Action
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: open-turo/actions-security/static-analysis/semgrep@v1
+      - uses: open-turo/actions-gha/test@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./static-analysis/semgrep
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
