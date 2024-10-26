@@ -12,13 +12,29 @@ GitHub Actions for security checks
 
 ## Actions
 
-### action: [`static-analysis`](./static-analysis)
+### action: [`container-scan`](./container-scan)
 
 Scan code changes for security vulnerabilities
 
-See usage [here](./static-analysis/README.md#usage).
+See usage [here](./container-scan/README.md#usage).
 
-Documentation is found [here](./static-analysis/README.md).
+Documentation is found [here](./container-scan/README.md).
+
+### action: [`docker-build`](./docker-build)
+
+Scan code changes for security vulnerabilities
+
+See usage [here](./docker-build/README.md#usage).
+
+Documentation is found [here](./docker-build/README.md).
+
+### action: [`static-analysis/semgrep`](./static-analysis/semgrep)
+
+Scan code changes for security vulnerabilities
+
+See usage [here](./static-analysis/semgrep/README.md#usage).
+
+Documentation is found [here](./static-analysis/semgrep/README.md).
 
 ## Get Help
 
