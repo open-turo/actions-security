@@ -87,7 +87,7 @@ runs:
         fi
 
     - name: Scan container image for vulnerabilities using Lacework
-      uses: lacework/lw-scanner-action@v1.4.2
+      uses: lacework/lw-scanner-action@v1.4.3
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
