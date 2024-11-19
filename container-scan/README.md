@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-GitHub Action for scanning container image for vulnerabilities using Lacework
+GitHub Action for scanning container images for vulnerabilities using Lacework.
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
@@ -13,40 +13,22 @@ GitHub Action for scanning container image for vulnerabilities using Lacework
 ```yaml
 - uses: @
   with:
+    skip-checkout:
+    # Skip repository checkout in this step
+    #
+    # Required: false
+    # Default: false
+
     dockerhub-user:
-    # username for dockerhub
+    # DockerHub username
     #
     # Required: false
     # Default: ""
 
     dockerhub-password:
-    # password for dockerhub
+    # DockerHub password
     #
     # Required: false
-    # Default: ""
-
-    docker-config-file:
-    # Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
-    #
-    # Required: false
-    # Default: .docker-config.json
-
-    github-token:
-    # GitHub token
-    #
-    # Required: true
-    # Default: ""
-
-    lw-account-name:
-    # Lacework account name
-    #
-    # Required: true
-    # Default: ""
-
-    lw-access-token:
-    # Lacework access token
-    #
-    # Required: true
     # Default: ""
 
     image-name:
@@ -61,29 +43,35 @@ GitHub Action for scanning container image for vulnerabilities using Lacework
     # Required: true
     # Default: ""
 
-    image-platform:
-    # Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
-    #
-    # Required: false
-    # Default: linux/amd64
-
-    build-args:
-    # List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE)
-    #
-    # Required: false
-    # Default: ""
-
-    secrets:
-    # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
-    #
-    # Required: false
-    # Default: ""
-
     enable-docker-build:
-    # Docker image tag
+    # Enable Docker build
     #
     # Required: false
     # Default: true
+
+    lw-account-name:
+    # Lacework account name
+    #
+    # Required: true
+    # Default: ""
+
+    lw-access-token:
+    # Lacework access token
+    #
+    # Required: true
+    # Default: ""
+
+    github-token:
+    # GitHub token
+    #
+    # Required: true
+    # Default: ""
+
+    build-args:
+    # Docker build arguments
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
