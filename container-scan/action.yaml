@@ -1,56 +1,58 @@
 name: "Security Scan Composite Action"
-description: "GitHub Action for scanning container image for vulnerabilities using Lacework"
+description: "GitHub Action for scanning container images for vulnerabilities using Lacework."
 
 inputs:
   dockerhub-user:
     required: false
     default: ""
-    description: username for dockerhub
+    description: DockerHub username for authentication.
   dockerhub-password:
     required: false
     default: ""
-    description: password for dockerhub
+    description: DockerHub password for authentication.
   docker-config-file:
     required: false
-    description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    description: Path to the Docker config file (default is .docker-config.json) Must contain imageName and optionally the Dockerfile path.
     default: .docker-config.json
   github-token:
     required: true
-    description: GitHub token
+    description: GitHub token for accessing repositories.
   lw-account-name:
     required: true
-    description: Lacework account name
+    description: Lacework account name for scanning.
   lw-access-token:
     required: true
-    description: Lacework access token
+    description: Lacework access token for scanning.
   image-name:
     required: false
-    description: Docker image name
+    description: Name of the Docker image to scan.
   image-tag:
     required: true
-    description: Docker image tag
+    description: Tag of the Docker image to scan.
   image-platform:
-    description: Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
     required: false
     default: linux/amd64
-
+    description: Target platform for Docker image (e.g., linux/amd64, linux/arm64).
   build-args:
     required: false
-    description: List of build arguments for docker build as key-value pairs (e.g., KEY=VALUE)
+    description: Build arguments for the Docker build as key-value pairs.
     default: ""
   secrets:
     required: false
-    description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
+    description: Secrets for the Docker build as key-value pairs.
     default: ""
   enable-docker-build:
     required: false
     default: true
-    description: Docker image tag
+    description: Whether to enable Docker image building (default is true).
 
 outputs:
-  comment-id:
-    description: Comment ID of the test report
-    value: ${{ steps.comment-pr.outputs.comment-id }}
+  image-name:
+    description: Name of the scanned Docker image.
+  image-tag:
+    description: Tag of the scanned Docker image.
+  scan-results:
+    description: Path to the scan results file (e.g., results.stdout).
 
 runs:
   using: composite
@@ -58,7 +60,7 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Build docker image
+    - name: Build Docker Image
       if: ${{ inputs.enable-docker-build }}
       uses: open-turo/actions-security/docker-build@v2
       id: docker-build
@@ -76,40 +78,40 @@ runs:
         build-args: ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
 
-    - name: "Determining image name"
+    - name: Determine Image Name
       shell: bash
-      id: set_image_name
+      id: set-image-name
       run: |
         if [ "${{ inputs.enable-docker-build }}" == "true" ]; then
-          echo "::set-output name=image_name::${{ steps.docker-build.outputs.image-name }}"
+          echo "::set-output name=image-name::${{ steps.docker-build.outputs.image-name }}"
         else
-          echo "::set-output name=image_name::${{ inputs.image-name }}"
+          echo "::set-output name=image-name::${{ inputs.image-name }}"
         fi
 
-    - name: Scan container image for vulnerabilities using Lacework
+    - name: Scan Container Image
       uses: lacework/lw-scanner-action@v1.4.3
+      id: scan
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
-        IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
+        IMAGE_NAME: ${{ steps.set-image-name.outputs.image-name }}
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
         RESULTS_IN_GITHUB_SUMMARY: true
-        PRETTY_OUTPUT: true
 
-    - name: Check if Lacework scan results file exist
+    - name: Check for Lacework Scan Results
       id: check-results
       run: |
         if [ -f results.stdout ]; then
-          echo "Scan results file (results.stdout) exists"
-          exit 0
+          echo "Scan results file (results.stdout) exists."
+          echo "::set-output name=scan-results::results.stdout"
         else
-          echo "Scan results file (results.stdout) does not exist"
+          echo "Scan results file (results.stdout) does not exist."
           exit 1
         fi
       shell: bash
 
-    - name: Change formatting for PR
+    - name: Format Results for PR
       if: always()
       run: |
         echo "## Lacework Inline Scanner Results" > pr-results.md
@@ -120,32 +122,7 @@ runs:
         echo "</details>" >> pr-results.md
       shell: bash
 
-    - name: Check for previous report comment
-      id: fc
-      if: github.event_name == 'pull_request' && github.event.pull_request.number != ''
-      uses: peter-evans/find-comment@v3
-      with:
-        issue-number: ${{ github.event.pull_request.number }}
-        comment-author: "github-actions[bot]"
-        body-includes: "Lacework Inline Scanner Results"
-
-    - name: Delete previous test report comment
-      if: github.event_name == 'pull_request' && steps.fc.outputs.comment-id != ''
-      uses: winterjung/comment@v1
-      with:
-        type: delete
-        comment_id: ${{ steps.fc.outputs.comment-id }}
-        token: ${{ inputs.github-token }}
-
-    - name: Comment PR
-      if: github.event_name == 'pull_request'
-      uses: thollander/actions-comment-pull-request@v3
-      with:
-        filePath: pr-results.md
-        mode: recreate
-        comment_tag: to_recreate
-
-    - name: Cleanup docker image
+    - name: Cleanup Docker Image
       if: always()
       run: |
         docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }}
