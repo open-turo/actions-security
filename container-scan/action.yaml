@@ -49,9 +49,7 @@ inputs:
 outputs:
   image-name:
     description: Name of the scanned Docker image.
-  image-tag:
-    description: Tag of the scanned Docker image.
-  scan-results:
+  scan-results-path:
     description: Path to the scan results file (e.g., results.stdout).
 
 runs:
@@ -104,7 +102,7 @@ runs:
       run: |
         if [ -f results.stdout ]; then
           echo "Scan results file (results.stdout) exists."
-          echo "::set-output name=scan-results::results.stdout"
+          echo "::set-output name=scan-results-path::results.stdout"
         else
           echo "Scan results file (results.stdout) does not exist."
           exit 1
@@ -121,6 +119,31 @@ runs:
         echo "</pre>" >> pr-results.md
         echo "</details>" >> pr-results.md
       shell: bash
+
+    - name: Check for Previous Report Comment
+      id: fc
+      if: github.event_name == 'pull_request' && github.event.pull_request.number != ''
+      uses: peter-evans/find-comment@v3
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: "github-actions[bot]"
+        body-includes: "Lacework Inline Scanner Results"
+
+    - name: Delete Previous Test Report Comment
+      if: github.event_name == 'pull_request' && steps.fc.outputs.comment-id != ''
+      uses: winterjung/comment@v1
+      with:
+        type: delete
+        comment_id: ${{ steps.fc.outputs.comment-id }}
+        token: ${{ inputs.github-token }}
+
+    - name: Comment PR
+      if: github.event_name == 'pull_request'
+      uses: thollander/actions-comment-pull-request@v3
+      with:
+        filePath: pr-results.md
+        mode: recreate
+        comment_tag: to_recreate
 
     - name: Cleanup Docker Image
       if: always()
