@@ -102,7 +102,7 @@ runs:
       run: |
         if [ -f results.stdout ]; then
           echo "Scan results file (results.stdout) exists."
-          echo "::set-output name=scan-results-path::results.stdout"
+          echo "::set-output name=scan-results-path=results.stdout" >> "$GITHUB_ENV"
         else
           echo "Scan results file (results.stdout) does not exist."
           exit 1
@@ -141,12 +141,15 @@ runs:
       if: github.event_name == 'pull_request'
       uses: thollander/actions-comment-pull-request@v3
       with:
-        filePath: pr-results.md
+        file-path: pr-results.md
         mode: recreate
         comment_tag: to_recreate
+        github_token: ${{ inputs.github-token }}
 
     - name: Cleanup Docker Image
       if: always()
       run: |
+        echo "Image Name: ${{ steps.docker-build.outputs.image-name }}"
+        echo "Image Tag: ${{ inputs.image-tag }}"
         docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }}
       shell: bash
