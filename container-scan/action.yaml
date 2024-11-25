@@ -1,5 +1,7 @@
+---
 name: "Security Scan Composite Action"
-description: "GitHub Action for scanning container images for vulnerabilities using Lacework."
+description: >
+  GitHub Action for scanning container images for vulnerabilities using Lacework.
 
 inputs:
   dockerhub-user:
@@ -12,7 +14,9 @@ inputs:
     description: DockerHub password for authentication.
   docker-config-file:
     required: false
-    description: Path to the Docker config file (default is .docker-config.json) Must contain imageName and optionally the Dockerfile path.
+    description: >
+      Path to the Docker config file (default is .docker-config.json). Must
+      contain imageName and optionally the Dockerfile path.
     default: .docker-config.json
   github-token:
     required: true
@@ -32,19 +36,23 @@ inputs:
   image-platform:
     required: false
     default: linux/amd64
-    description: Target platform for Docker image (e.g., linux/amd64, linux/arm64).
+    description: >
+      Target platform for Docker image (e.g., linux/amd64, linux/arm64).
   build-args:
     required: false
-    description: Build arguments for the Docker build as key-value pairs.
+    description: >
+      Build arguments for the Docker build as key-value pairs.
     default: ""
   secrets:
     required: false
-    description: Secrets for the Docker build as key-value pairs.
+    description: >
+      Secrets for the Docker build as key-value pairs.
     default: ""
   enable-docker-build:
     required: false
     default: true
-    description: Whether to enable Docker image building (default is true).
+    description: >
+      Whether to enable Docker image building (default is true).
 
 outputs:
   image-name:
@@ -81,9 +89,10 @@ runs:
       id: set-image-name
       run: |
         if [ "${{ inputs.enable-docker-build }}" == "true" ]; then
-          echo "::set-output name=image-name::${{ steps.docker-build.outputs.image-name }}"
+          echo "IMAGE_NAME=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ inputs.image-tag }}" >> $GITHUB_ENV
         else
-          echo "::set-output name=image-name::${{ inputs.image-name }}"
+          echo "IMAGE_NAME=${{ inputs.image-name }}" >> $GITHUB_ENV
         fi
 
     - name: Scan Container Image
@@ -102,7 +111,7 @@ runs:
       run: |
         if [ -f results.stdout ]; then
           echo "Scan results file (results.stdout) exists."
-          echo "::set-output name=scan-results-path=results.stdout" >> "$GITHUB_ENV"
+          echo "scan-results-path=results.stdout" >> "$GITHUB_ENV"
         else
           echo "Scan results file (results.stdout) does not exist."
           exit 1

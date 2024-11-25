@@ -26,7 +26,7 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
     # Default: ""
 
     docker-config-file:
-    # Path to the Docker config file (default is .docker-config.json) Must contain imageName and optionally the Dockerfile path.
+    # Path to the Docker config file (default is .docker-config.json). Must contain imageName and optionally the Dockerfile path.
     #
     # Required: false
     # Default: .docker-config.json
