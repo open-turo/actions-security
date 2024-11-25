@@ -14,34 +14,58 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
 - uses: @
   with:
     dockerhub-user:
-    # DockerHub username for authentication.
+    # DockerHub username
     #
     # Required: false
     # Default: ""
 
     dockerhub-password:
-    # DockerHub password for authentication.
+    # DockerHub password
     #
     # Required: false
     # Default: ""
 
     image-name:
-    # Name of the Docker image to scan (only required if not building an image).
+    # Docker image name
     #
     # Required: false
     # Default: ""
 
     image-tag:
-    # Tag of the Docker image to scan.
+    # Docker image tag
     #
     # Required: true
     # Default: ""
 
     enable-docker-build:
-    # Whether to enable Docker image building (default is true).
+    # Enable Docker build
     #
     # Required: false
     # Default: true
+
+    lw-account-name:
+    # Lacework account name
+    #
+    # Required: true
+    # Default: ""
+
+    lw-access-token:
+    # Lacework access token
+    #
+    # Required: true
+    # Default: ""
+
+    github-token:
+    # GitHub token
+    #
+    # Required: true
+    # Default: ""
+
+    build-args:
+    # Docker build arguments
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 

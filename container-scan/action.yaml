@@ -6,21 +6,33 @@ inputs:
   dockerhub-user:
     required: false
     default: ""
-    description: DockerHub username for authentication.
+    description: DockerHub username
   dockerhub-password:
     required: false
     default: ""
-    description: DockerHub password for authentication.
+    description: DockerHub password
   image-name:
     required: false
-    description: Name of the Docker image to scan (only required if not building an image).
+    description: Docker image name
   image-tag:
     required: true
-    description: Tag of the Docker image to scan.
+    description: Docker image tag
   enable-docker-build:
     required: false
     default: true
-    description: Whether to enable Docker image building (default is true).
+    description: Enable Docker build
+  lw-account-name:
+    required: true
+    description: Lacework account name
+  lw-access-token:
+    required: true
+    description: Lacework access token
+  github-token:
+    required: true
+    description: GitHub token
+  build-args:
+    required: false
+    description: Docker build arguments
 
 outputs:
   image-name:
@@ -42,6 +54,7 @@ runs:
         image-version: ${{ inputs.image-tag }}
         load: true
         push: false
+        build-args: ${{ inputs.build-args }}
 
     - name: Determine Image Name
       run: |
