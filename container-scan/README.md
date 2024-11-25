@@ -25,32 +25,8 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
     # Required: false
     # Default: ""
 
-    docker-config-file:
-    # Path to the Docker config file (default is .docker-config.json). Must contain imageName and optionally the Dockerfile path.
-    #
-    # Required: false
-    # Default: .docker-config.json
-
-    github-token:
-    # GitHub token for accessing repositories.
-    #
-    # Required: true
-    # Default: ""
-
-    lw-account-name:
-    # Lacework account name for scanning.
-    #
-    # Required: true
-    # Default: ""
-
-    lw-access-token:
-    # Lacework access token for scanning.
-    #
-    # Required: true
-    # Default: ""
-
     image-name:
-    # Name of the Docker image to scan.
+    # Name of the Docker image to scan (only required if not building an image).
     #
     # Required: false
     # Default: ""
@@ -59,24 +35,6 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
     # Tag of the Docker image to scan.
     #
     # Required: true
-    # Default: ""
-
-    image-platform:
-    # Target platform for Docker image (e.g., linux/amd64, linux/arm64).
-    #
-    # Required: false
-    # Default: linux/amd64
-
-    build-args:
-    # Build arguments for the Docker build as key-value pairs.
-    #
-    # Required: false
-    # Default: ""
-
-    secrets:
-    # Secrets for the Docker build as key-value pairs.
-    #
-    # Required: false
     # Default: ""
 
     enable-docker-build:
