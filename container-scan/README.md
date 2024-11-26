@@ -66,12 +66,6 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
     #
     # Required: false
     # Default: ""
-
-    output-format:
-    # Output format for Lacework scan results (json/table)
-    #
-    # Required: false
-    # Default: json
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
