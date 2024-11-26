@@ -33,6 +33,10 @@ inputs:
   build-args:
     required: false
     description: Docker build arguments
+  output-format:
+    required: false
+    default: "json"
+    description: "Output format for Lacework scan results (json/table)"
 
 outputs:
   image-name:
@@ -73,6 +77,7 @@ runs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
+        OUTPUT_FORMAT: ${{ inputs.output-format }}
 
     - name: Cleanup Docker Image
       if: always()
