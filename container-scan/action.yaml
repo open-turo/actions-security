@@ -73,7 +73,7 @@ runs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
-        SCANNER_FLAGS: "-j=true"
+        ADDITIONAL_PARAMETERS: "-j=true"
 
     - name: Cleanup Docker Image
       if: always()
