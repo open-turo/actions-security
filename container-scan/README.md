@@ -13,6 +13,12 @@ GitHub Action for scanning container images for vulnerabilities using Lacework.
 ```yaml
 - uses: @
   with:
+    skip-checkout:
+    # Skip repository checkout in this step
+    #
+    # Required: false
+    # Default: false
+
     dockerhub-user:
     # DockerHub username
     #

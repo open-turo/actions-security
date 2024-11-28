@@ -3,6 +3,11 @@ description: >
   GitHub Action for scanning container images for vulnerabilities using Lacework.
 
 inputs:
+  skip-checkout:
+    required: false
+    default: "false"
+    description: Skip repository checkout in this step
+
   dockerhub-user:
     required: false
     default: ""
@@ -42,6 +47,7 @@ runs:
   using: composite
   steps:
     - name: Checkout Repository
+      if: ${{ inputs.skip-checkout != 'true' }}
       uses: actions/checkout@v4
 
     - name: Build Docker Image
