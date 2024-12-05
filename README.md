@@ -28,13 +28,13 @@ See usage [here](./docker-build/README.md#usage).
 
 Documentation is found [here](./docker-build/README.md).
 
-### action: [`static-analysis/semgrep`](./static-analysis/semgrep)
+### action: [`static-analysis`](./static-analysis/)
 
 Scan code changes for security vulnerabilities
 
-See usage [here](./static-analysis/semgrep/README.md#usage).
+See usage [here](./static-analysis/README.md#usage).
 
-Documentation is found [here](./static-analysis/semgrep/README.md).
+Documentation is found [here](./static-analysis/README.md).
 
 ## Get Help
 
