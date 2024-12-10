@@ -1,19 +1,17 @@
 name: Run static code analysis
 description: GitHub Action that scans code changes being made and posts security findings in form of comments on pull requests
 inputs:
-  checkout-repo:
-    description: Perform checkout as first step
-    required: false
-    default: "true"
   semgrep-app-token:
     required: true
-    description: SemGrep API token to be added to repo that allows pulling the latest rule config from ruleboard in Semgrep UI
+    description: Semgrep API token to pull the latest rule configuration from Semgrep's ruleboard
+  checkout-repo:
+    description: Perform checkout as the first step
+    required: false
+    default: "true"
+
 runs:
-  using: composite
-  image: semgrep/semgrep:latest-nonroot
-  steps:
-    - name: Checkout
-      if: ${{ inputs.checkout-repo == 'true' }}
-      uses: actions/checkout@v4
-    - run: semgrep ci
-      shell: bash
+  using: docker
+  image: docker://semgrep/semgrep:latest-nonroot
+  entrypoint: semgrep
+  args:
+    - ci
