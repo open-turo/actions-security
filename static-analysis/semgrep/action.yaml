@@ -15,3 +15,5 @@ runs:
   entrypoint: semgrep
   args:
     - ci
+  env:
+    SEMGREP_USER_HOME: /tmp
