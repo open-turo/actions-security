@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-Github Action that scans code changes being made and posts security findings in form of comments on pull requests
+GitHub Action that scans code changes being made and posts security findings in the form of comments on pull requests
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
@@ -14,13 +14,13 @@ Github Action that scans code changes being made and posts security findings in 
 - uses: @
   with:
     checkout-repo:
-    # Perform checkout as first step
+    # Perform checkout as the first step
     #
     # Required: false
     # Default: true
 
     semgrep-app-token:
-    # SemGrep API token to be added to repo that allows to pull latest rule config from ruleboard in Semgrep UI
+    # Semgrep API token to be added to the repo that allows pulling the latest rule config from the ruleboard in the Semgrep UI
     #
     # Required: true
     # Default: ""
