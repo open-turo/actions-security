@@ -8,9 +8,6 @@ inputs:
   semgrep-app-token:
     required: true
     description: Semgrep API token to be added to the repo that allows pulling the latest rule config from the ruleboard in the Semgrep UI
-  github-token:
-    required: true
-    description: GitHub token that can checkout the repository. e.g. 'secrets.GITHUB_TOKEN'
 
 runs:
   using: composite
@@ -26,8 +23,7 @@ runs:
         default_branch=$(gh api repos/${{ github.repository }} --jq .default_branch)
         echo "Default branch is $default_branch"
         echo "default_branch=$default_branch" >> $GITHUB_ENV
-      env:
-        github-token: ${{ inputs.github-token}}
+      env: GH_TOKEN:${{ github.token }}
       shell: bash
 
     # Semgrep CI step with dynamic baseline reference

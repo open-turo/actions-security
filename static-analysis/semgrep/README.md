@@ -24,12 +24,6 @@ GitHub Action that scans code changes being made and posts security findings in 
     #
     # Required: true
     # Default: ""
-
-    github-token:
-    # GitHub token that can checkout the repository. e.g. 'secrets.GITHUB_TOKEN'
-    #
-    # Required: true
-    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
