@@ -23,7 +23,8 @@ runs:
         default_branch=$(gh api repos/${{ github.repository }} --jq .default_branch)
         echo "Default branch is $default_branch"
         echo "default_branch=$default_branch" >> $GITHUB_ENV
-      env: GH_TOKEN:${{ github.token }}
+      env:
+        GH_TOKEN: ${{ github.token }}
       shell: bash
 
     # Semgrep CI step with dynamic baseline reference
