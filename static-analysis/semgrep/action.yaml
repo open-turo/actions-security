@@ -24,7 +24,7 @@ runs:
         echo "Default branch is $default_branch"
         echo "default_branch=$default_branch" >> $GITHUB_ENV
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       shell: bash
 
     # Semgrep CI step with dynamic baseline reference
