@@ -1,43 +1,28 @@
 name: Run static code analysis
-description: Github Action that scans code changes being made and posts security findings in form of comments on pull requests
+description: GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
 inputs:
   checkout-repo:
-    description: Perform checkout as first step
+    description: Perform checkout as the first step
     required: false
     default: "true"
   semgrep-app-token:
     required: true
-    description: SemGrep API token to pull the latest rule configuration from Semgrep's ruleboard
-
+    description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
 runs:
   using: composite
   steps:
-    - name: Checkout
-      if: ${{ inputs.checkout-repo == 'true' }}
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
-        fetch-depth: 2
+        fetch-depth: 2 # Fetch only the last two commits for efficient diff comparison
 
-    - name: Fetch Baseline Branch
-      run: |
-        set -e  # Fail on any errors
-        BASE_BRANCH=$(jq -r '.pull_request.base.ref // "main"' < "${GITHUB_EVENT_PATH}")
-        echo "Fetching base branch: $BASE_BRANCH"
-        git fetch origin $BASE_BRANCH:$BASE_BRANCH
-        echo "Base branch $BASE_BRANCH fetched successfully."
-      shell: bash
-
-    - name: Run Semgrep
-      run: |
-        BASE_BRANCH=$(jq -r '.pull_request.base.ref // "main"' < "${GITHUB_EVENT_PATH}")
-        echo "Running Semgrep with baseline branch: $BASE_BRANCH"
+    - run: |
         docker run --rm -v "${PWD}:/src" \
         -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
         -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
         -e SEMGREP_BRANCH=${GITHUB_REF} \
         -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
         -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF=refs/heads/$BASE_BRANCH \
+        -e SEMGREP_BASELINE_REF='HEAD^' \
         semgrep/semgrep:latest-nonroot \
         semgrep ci
       shell: bash
