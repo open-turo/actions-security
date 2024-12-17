@@ -21,6 +21,6 @@ jobs:
       - uses: open-turo/actions-gha/test@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: ./static-analysis/semgrep
+      - uses: ./static-analysis
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
