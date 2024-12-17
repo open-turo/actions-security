@@ -38,6 +38,8 @@ runs:
       uses: open-turo/actions-security/docker-build@v3
       id: docker-build
       with:
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-password: ${{ inputs.dockerhub-password }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
 
