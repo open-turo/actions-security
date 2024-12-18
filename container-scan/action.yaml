@@ -30,6 +30,9 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
     - name: Build Docker Image
       if: ${{ inputs.enable-docker-build == 'true' }}
       uses: open-turo/actions-security/docker-build@v2
