@@ -60,7 +60,7 @@ runs:
 
     - name: Build docker image
       if: ${{ inputs.enable-docker-build }}
-      uses: open-turo/actions-security/docker-build@v2
+      uses: open-turo/actions-security/docker-build@v3
       id: docker-build
       with:
         dockerhub-user: ${{ inputs.dockerhub-user }}
