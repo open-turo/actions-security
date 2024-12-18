@@ -48,6 +48,18 @@ Scans container images for vulnerabilities using Lacework
     #
     # Required: true
     # Default: ""
+
+    dockerhub-user:
+    # DockerHub username
+    #
+    # Required: true
+    # Default: ""
+
+    dockerhub-password:
+    # DockerHub password
+    #
+    # Required: true
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 

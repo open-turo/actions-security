@@ -21,6 +21,12 @@ inputs:
   lw-access-token:
     required: true
     description: "Lacework access token"
+  dockerhub-user:
+    required: true
+    description: "DockerHub username"
+  dockerhub-password:
+    required: true
+    description: "DockerHub password"
 
 outputs:
   scan-results-path:
