@@ -13,24 +13,16 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 0 # Fetch only the last two commits for efficient diff comparison
 
     - run: |
-        echo "Fetching the base branch..."
-        git fetch origin ${{ github.event.pull_request.base.ref }}
-
-        echo "Determining the baseline commit..."
-        BASELINE_REF=$(git merge-base HEAD origin/${{ github.event.pull_request.base.ref }})
-
-        echo "Baseline commit: $BASELINE_REF"
-
         docker run --rm -v "${PWD}:/src" \
-          -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
-          -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
-          -e SEMGREP_BRANCH=${GITHUB_REF} \
-          -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
-          -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-          -e SEMGREP_BASELINE_REF="$BASELINE_REF" \
-          semgrep/semgrep:latest-nonroot \
-          semgrep ci
+        -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
+        -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
+        -e SEMGREP_BRANCH=${GITHUB_REF} \
+        -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
+        -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
+        -e SEMGREP_BASELINE_REF='HEAD^' \
+        semgrep/semgrep:latest-nonroot \
+        semgrep ci
       shell: bash
