@@ -17,7 +17,7 @@ runs:
         ref: ${{ github.head_ref }} # Checkout the current PR branch
 
     - run: |
-        #Fetch the base branch explicitly
+        # Fetch the base branch explicitly
         git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
 
         # Attempt to calculate baseline commit dynamically
