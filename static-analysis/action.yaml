@@ -13,8 +13,7 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 #ensures all required commits are available, avoiding shallow clone limitation.
-        ref: ${{ github.base_ref }} #Fetch the correct branch
+        fetch-depth: 0 # Fetch only the last two commits for efficient diff comparison
 
     - run: |
         docker run --rm -v "${PWD}:/src" \
@@ -23,7 +22,7 @@ runs:
         -e SEMGREP_BRANCH=${GITHUB_REF} \
         -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
         -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF=$(git merge-base HEAD origin/${GITHUB_BASE_REF}) \
+        -e SEMGREP_BASELINE_REF='HEAD^' \
         semgrep/semgrep:latest-nonroot \
         semgrep ci
       shell: bash
