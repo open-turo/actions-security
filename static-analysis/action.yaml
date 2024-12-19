@@ -13,16 +13,42 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch only the last two commits for efficient diff comparison
+        fetch-depth: 0 # Fetch full history to ensure the baseline commit can be resolved
 
     - run: |
+        echo "Fetching the base branch..."
+        git fetch origin ${{ github.event.pull_request.base.ref }}
+
+        echo "Determining the baseline commit..."
+        BASELINE_REF=$(git merge-base HEAD origin/${{ github.event.pull_request.base.ref }}) || {
+          echo "::error::Failed to determine the baseline commit. Possible reasons:"
+          echo "- The base branch '${{ github.event.pull_request.base.ref }}' is not fetched."
+          echo "- The repository does not have enough commit history to compute a common ancestor."
+          echo "- There may be an issue with the GitHub API or runner environment."
+          git log --oneline --graph --decorate || echo "::error::Unable to display commit graph."
+          exit 1
+        }
+
+        echo "Baseline commit resolved successfully: $BASELINE_REF"
+
+        echo "Starting Semgrep scan with the following details:"
+        echo "- Repository: $GITHUB_REPOSITORY"
+        echo "- Branch: $GITHUB_REF"
+        echo "- PR ID: ${{ github.event.pull_request.number }}"
+        echo "- Head SHA: ${{ github.event.pull_request.head.sha }}"
+        echo "- Baseline SHA: $BASELINE_REF"
+
         docker run --rm -v "${PWD}:/src" \
         -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
         -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
         -e SEMGREP_BRANCH=${GITHUB_REF} \
         -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
         -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF='HEAD^' \
+        -e SEMGREP_BASELINE_REF="$BASELINE_REF" \
         semgrep/semgrep:latest-nonroot \
-        semgrep ci
+        semgrep ci || {
+          echo "::error::Semgrep scan failed. Check the output above for details."
+          exit 1
+        }
+
       shell: bash
