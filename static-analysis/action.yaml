@@ -13,16 +13,31 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch only the last two commits for efficient diff comparison
+        fetch-depth: 2 # Fetch the last two commits by default
+        ref: ${{ github.head_ref }} # Checkout the current PR branch
 
     - run: |
+        #Fetch the base branch explicitly
+        git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+
+        # Attempt to calculate baseline commit dynamically
+        BASELINE_REF=$(git merge-base HEAD origin/${{ github.base_ref }} || echo "")
+
+        # If merge-base fails, fallback to fetch the full history
+        if [ -z "$BASELINE_REF" ]; then
+          echo "Merge base not found. Fetching full history."
+          git fetch --unshallow
+          BASELINE_REF=$(git merge-base HEAD origin/${{ github.base_ref }})
+        fi
+
+        # Run Semgrep with the calculated baseline
         docker run --rm -v "${PWD}:/src" \
         -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
         -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
         -e SEMGREP_BRANCH=${GITHUB_REF} \
         -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
         -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF='HEAD^' \
+        -e SEMGREP_BASELINE_REF=$BASELINE_REF \
         semgrep/semgrep:latest-nonroot \
         semgrep ci
       shell: bash
