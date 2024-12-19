@@ -1,5 +1,5 @@
 name: Run static code analysis
-description: GitHub Action that scans code changes and reports security findings on pull requests.
+description: GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
 inputs:
   checkout-repo:
     description: Perform checkout as the first step
@@ -7,55 +7,38 @@ inputs:
     default: "true"
   semgrep-app-token:
     required: true
-    description: Semgrep API token for fetching rule configurations.
+    description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
 runs:
   using: composite
   steps:
-    # Step 1: Checkout the repository with full history
-    - uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Ensure complete history is available for determining the baseline
+        fetch-depth: 0 # Fetch all commits to ensure complete diff analysis
 
-    # Step 2: Fetch the base branch
-    - run: |
-        echo "Fetching the base branch..."
-        git fetch origin main
-      shell: bash
-
-    # Step 3: Determine the baseline commit
-    - run: |
-        echo "Determining the baseline commit..."
-        BASELINE_REF=$(git merge-base HEAD origin/main) || {
-          echo "::error::Failed to determine the baseline commit. Possible reasons:"
-          echo "- The base branch 'main' is not fetched."
-          echo "- Insufficient commit history for computing a common ancestor."
-          echo "- Issues with the GitHub API or runner environment."
-          echo "Displaying commit graph for debugging:"
-          git log --oneline --graph --decorate || echo "::error::Unable to display commit graph."
+    - name: Determine Baseline Commit
+      id: baseline
+      run: |
+        set -e
+        echo "Calculating baseline commit..."
+        BASELINE_COMMIT=$(git merge-base HEAD origin/${GITHUB_BASE_REF})
+        if [ -z "$BASELINE_COMMIT" ]; then
+          echo "ERROR: Failed to determine baseline commit"
           exit 1
-        }
-        echo "Baseline commit resolved: $BASELINE_REF"
-        echo "BASELINE_REF=$BASELINE_REF" >> $GITHUB_ENV
-      shell: bash
+        fi
+        echo "Baseline Commit: $BASELINE_COMMIT"
+        echo "baseline_commit=$BASELINE_COMMIT" >> $GITHUB_OUTPUT
 
-    # Step 4: Perform Semgrep scan with logging
-    - run: |
-        echo "Starting Semgrep scan with the following details:"
-        echo "- Repository: $GITHUB_REPOSITORY"
-        echo "- Branch: $GITHUB_REF"
-        echo "- PR ID: ${{ github.event.pull_request.number }}"
-        echo "- Head SHA: ${{ github.event.pull_request.head.sha }}"
-        echo "- Baseline SHA: $BASELINE_REF"
+    - name: Run Semgrep Scan
+      run: |
+        echo "Starting Semgrep scan..."
         docker run --rm -v "${PWD}:/src" \
-          -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
-          -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
-          -e SEMGREP_BRANCH=${GITHUB_REF} \
-          -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
-          -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-          -e SEMGREP_BASELINE_REF="$BASELINE_REF" \
-          semgrep/semgrep:latest-nonroot \
-          semgrep ci || {
-            echo "::error::Semgrep scan failed. Review the output above for details."
-            exit 1
-          }
+        -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
+        -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
+        -e SEMGREP_BRANCH=${GITHUB_REF} \
+        -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
+        -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
+        -e SEMGREP_BASELINE_REF=${{ steps.baseline.outputs.baseline_commit }} \
+        semgrep/semgrep:latest-nonroot \
+        semgrep ci
       shell: bash
