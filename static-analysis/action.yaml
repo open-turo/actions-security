@@ -28,6 +28,7 @@ runs:
         fi
         echo "Baseline Commit: $BASELINE_COMMIT"
         echo "baseline_commit=$BASELINE_COMMIT" >> $GITHUB_OUTPUT
+      shell: bash
 
     - name: Run Semgrep Scan
       run: |
