@@ -29,5 +29,5 @@ runs:
         semgrep --version
 
         # Run Semgrep with the specified configuration
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" semgrep ci
+        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" semgrep ci --verbose --config auto
       shell: bash
