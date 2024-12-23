@@ -1,45 +1,15 @@
-name: Run static code analysis
-description: GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
+name: Run Semgrep via explicit docker call
+description: Run Semgrep via explicit docker call
 inputs:
-  checkout-repo:
-    description: Perform checkout as the first step
-    required: false
-    default: "true"
   semgrep-app-token:
     required: true
-    description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
+    description: Semgrep app token
 runs:
   using: composite
   steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Fetch all commits to ensure complete diff analysis
-
-    - name: Determine Baseline Commit
-      id: baseline
-      run: |
-        set -e
-        echo "Calculating baseline commit..."
-        BASELINE_COMMIT=$(git merge-base HEAD origin/${GITHUB_BASE_REF})
-        if [ -z "$BASELINE_COMMIT" ]; then
-          echo "ERROR: Failed to determine baseline commit"
-          exit 1
-        fi
-        echo "Baseline Commit: $BASELINE_COMMIT"
-        echo "baseline_commit=$BASELINE_COMMIT" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Run Semgrep Scan
-      run: |
-        echo "Starting Semgrep scan..."
-        docker run --rm -v "${PWD}:/src" \
-        -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
-        -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
-        -e SEMGREP_BRANCH=${GITHUB_REF} \
-        -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
-        -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF=${{ steps.baseline.outputs.baseline_commit }} \
-        semgrep/semgrep:latest-nonroot \
+    - uses: actions/checkout@v4
+    - run: |
+        pipx install semgrep
+        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}"
         semgrep ci
       shell: bash
