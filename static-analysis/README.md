@@ -13,12 +13,6 @@ GitHub Action that scans code changes being made and posts security findings as 
 ```yaml
 - uses: @
   with:
-    checkout-repo:
-    # Perform checkout as the first step
-    #
-    # Required: false
-    # Default: true
-
     semgrep-app-token:
     # Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
     #
