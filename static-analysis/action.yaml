@@ -1,14 +1,39 @@
-name: Run Semgrep via explicit docker call
-description: Run Semgrep via explicit docker call
+name: Run static code analysis
+description: GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
 inputs:
   semgrep-app-token:
     required: true
-    description: Semgrep app token
+    description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
 runs:
   using: composite
   steps:
+    # Step 1: Checkout the repository
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    # Step 2: Pre-check and install Semgrep if not already installed
     - run: |
-        pipx install semgrep
+        # Ensure PATH includes ~/.local/bin for pipx-installed tools
+        export PATH=$PATH:$HOME/.local/bin
+
+        # Check if Semgrep is installed
+        if ! command -v semgrep &> /dev/null; then
+          echo "Semgrep not found. Installing Semgrep..."
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+          export PATH=$PATH:$HOME/.local/bin  # Update PATH for this session
+          pipx install semgrep               # Install the latest version
+        else
+          echo "Semgrep already installed. Skipping installation."
+        fi
+
+        # Output Semgrep version for debugging purposes
+        semgrep --version
+      shell: bash
+
+    # Step 3: Run Semgrep with the specified configuration
+    - run: |
+        export PATH=$PATH:$HOME/.local/bin  # Ensure PATH includes Semgrep for the workflow session
         SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" semgrep ci
       shell: bash

@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-Run Semgrep via explicit docker call
+GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
@@ -14,7 +14,7 @@ Run Semgrep via explicit docker call
 - uses: @
   with:
     semgrep-app-token:
-    # Semgrep app token
+    # Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
     #
     # Required: true
     # Default: ""
