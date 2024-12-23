@@ -1,36 +1,37 @@
-name: "Container Security Scan"
-description: "Scans container images for vulnerabilities using Lacework"
+name: Container Security Scan
+description: Scans container images for vulnerabilities using Lacework
 
 inputs:
   image-name:
     required: false
-    description: "Docker image name"
+    description: Docker image name
   image-tag:
     required: true
-    description: "Docker image tag"
+    description: Docker image tag
   enable-docker-build:
     required: false
     default: "true"
-    description: "Enable Docker build"
+    description: Enable Docker build
   build-args:
     required: false
-    description: "Docker build arguments"
+    description: List of build arguments for docker build as key-value pairs
+  docker-config-file:
+    required: false
+    description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    default: .docker-config.json
+  secrets:
+    required: false
+    description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
   lw-account-name:
     required: true
-    description: "Lacework account name"
+    description: Lacework account name
   lw-access-token:
     required: true
-    description: "Lacework access token"
-  dockerhub-user:
-    required: true
-    description: "DockerHub username"
-  dockerhub-password:
-    required: true
-    description: "DockerHub password"
+    description: Lacework access token
 
 outputs:
   scan-results-path:
-    description: "Path to the scan results file"
+    description: Path to the scan results file
     value: ${{ steps.scan.outputs.results-file }}
 
 runs:
@@ -39,23 +40,20 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Build docker image
-      if: ${{ inputs.enable-docker-build }}
+    - name: Build Docker Image
+      if: ${{ inputs.enable-docker-build == 'true' }}
       uses: open-turo/actions-security/docker-build@v3
       id: docker-build
       with:
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-password: ${{ inputs.dockerhub-password }}
+        docker-config-file: ${{ inputs.docker-config-file }}
+        secrets: ${{ inputs.secrets }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
 
     - name: Determine Image Name
+      id: set_image_name
       run: |
-        if [ "${{ inputs.enable-docker-build }}" = "true" ]; then
-          echo "IMAGE_NAME=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_ENV
-        else
-          echo "IMAGE_NAME=${{ inputs.image-name }}" >> $GITHUB_ENV
-        fi
+        echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Scan Container Image
@@ -64,7 +62,7 @@ runs:
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
-        IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
         ADDITIONAL_PARAMETERS: "-j"
@@ -72,7 +70,5 @@ runs:
     - name: Cleanup Docker Image
       if: always()
       run: |
-        if [[ -n "${IMAGE_NAME}" ]]; then
-          docker image rm "${IMAGE_NAME}:${{ inputs.image-tag }}" || true
-        fi
+        docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }} || true
       shell: bash
