@@ -7,6 +7,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: open-turo/action-setup-tools/versions@v2
+      with:
+        python: 3.12.0
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: 2
