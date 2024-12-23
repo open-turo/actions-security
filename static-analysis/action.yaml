@@ -10,6 +10,5 @@ runs:
     - uses: actions/checkout@v4
     - run: |
         pipx install semgrep
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}"
-        semgrep ci
+        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" semgrep ci
       shell: bash
