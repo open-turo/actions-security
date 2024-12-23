@@ -1,10 +1,6 @@
 name: Run static code analysis
 description: GitHub Action that scans code changes being made and posts security findings as comments on pull requests.
 inputs:
-  checkout-repo:
-    description: Perform checkout as the first step
-    required: false
-    default: "true"
   semgrep-app-token:
     required: true
     description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
@@ -13,16 +9,12 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 2 # Fetch only the last two commits for efficient diff comparison
+        fetch-depth: 2
 
     - run: |
-        docker run --rm -v "${PWD}:/src" \
-        -e SEMGREP_APP_TOKEN=${{ inputs.semgrep-app-token }} \
-        -e SEMGREP_REPO_NAME=${GITHUB_REPOSITORY} \
-        -e SEMGREP_BRANCH=${GITHUB_REF} \
-        -e SEMGREP_COMMIT=${{ github.event.pull_request.head.sha }} \
-        -e SEMGREP_PR_ID=${{ github.event.pull_request.number }} \
-        -e SEMGREP_BASELINE_REF='HEAD^' \
-        semgrep/semgrep:latest-nonroot \
-        semgrep ci
+        export PATH=$PATH:$HOME/.local/bin
+
+        pipx install --force semgrep  # Install Semgrep if not already available
+
+        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" semgrep ci
       shell: bash
