@@ -10,7 +10,7 @@ runs:
     # Step 1: Checkout the repository
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 1
+        fetch-depth: 0
 
     # Step 2: Ensure Semgrep is installed and run the scan
     - run: |
