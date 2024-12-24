@@ -38,7 +38,7 @@ inputs:
 outputs:
   scan-results-path:
     description: Path to the scan results file
-    value: ${{ steps.scan.outputs.results-file }}
+    value: ${{ env.results-file }}
 
 runs:
   using: composite
@@ -67,6 +67,7 @@ runs:
     - name: Scan Container Image
       id: scan
       uses: lacework/lw-scanner-action@v1.4.3
+      shell: bash
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
@@ -74,6 +75,9 @@ runs:
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
         ADDITIONAL_PARAMETERS: "-j"
+      run: |
+        lacework/lw-scanner-action > results.stdout 2>&1
+        echo "results-file=results.stdout" >> $GITHUB_ENV
 
     - name: Cleanup Docker Image
       if: always()
