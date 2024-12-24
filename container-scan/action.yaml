@@ -8,6 +8,8 @@ inputs:
   image-tag:
     required: true
     description: Docker image tag
+  image-platform:
+    description: Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
   enable-docker-build:
     required: false
     default: "true"
@@ -19,6 +21,9 @@ inputs:
     required: false
     description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
     default: .docker-config.json
+  github-token:
+    required: false
+    description: GitHub token
   secrets:
     required: false
     description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
@@ -50,6 +55,8 @@ runs:
         secrets: ${{ inputs.secrets }}
         dockerhub-user: ${{ inputs.dockerhub-user }}
         dockerhub-password: ${{ inputs.dockerhub-password }}
+        github-token: ${{ inputs.github-token }}
+        image-platform: ${{ inputs.image-platform }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
 

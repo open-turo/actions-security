@@ -25,6 +25,12 @@ Scans container images for vulnerabilities using Lacework
     # Required: true
     # Default: ""
 
+    image-platform:
+    # Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
+    #
+    # Required: false
+    # Default: ""
+
     enable-docker-build:
     # Enable Docker build
     #
@@ -42,6 +48,12 @@ Scans container images for vulnerabilities using Lacework
     #
     # Required: false
     # Default: .docker-config.json
+
+    github-token:
+    # GitHub token
+    #
+    # Required: false
+    # Default: ""
 
     secrets:
     # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
