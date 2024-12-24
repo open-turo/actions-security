@@ -35,11 +35,6 @@ inputs:
     required: true
     description: DockerHub password
 
-outputs:
-  scan-results-path:
-    description: Path to the scan results file
-    value: ${{ steps.results.outputs.scan-results-path }}
-
 runs:
   using: composite
   steps:
@@ -74,12 +69,6 @@ runs:
         IMAGE_TAG: ${{ inputs.image-tag }}
         SAVE_RESULTS_IN_LACEWORK: true
         ADDITIONAL_PARAMETERS: "-j"
-
-    - name: Capture Scan Results path
-      id: results
-      run: |
-        echo "scan-results-path=$(cat{{ steps.scan.outputs.results-file }})" >> $GITHUB_OUTPUT
-      shell: bash
 
     - name: Cleanup Docker Image
       if: always()
