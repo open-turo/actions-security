@@ -14,7 +14,14 @@ inputs:
     description: Enable Docker build
   build-args:
     required: false
-    description: Docker build arguments
+    description: List of build arguments for docker build as key-value pairs
+  docker-config-file:
+    required: false
+    description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    default: .docker-config.json
+  secrets:
+    required: false
+    description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
   lw-account-name:
     required: true
     description: Lacework account name
@@ -40,16 +47,19 @@ runs:
       uses: actions/checkout@v4
 
     - name: Build docker image
-      if: ${{ inputs.enable-docker-build }}
+      if: ${{ inputs.enable-docker-build == 'true' }}
       uses: open-turo/actions-security/docker-build@v3
       id: docker-build
       with:
+        docker-config-file: ${{ inputs.docker-config-file }}
+        secrets: ${{ inputs.secrets }}
         dockerhub-user: ${{ inputs.dockerhub-user }}
         dockerhub-password: ${{ inputs.dockerhub-password }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
 
     - name: Determine Image Name
+      id: set_image_name
       run: |
         echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash

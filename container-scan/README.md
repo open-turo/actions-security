@@ -32,7 +32,19 @@ Scans container images for vulnerabilities using Lacework
     # Default: true
 
     build-args:
-    # Docker build arguments
+    # List of build arguments for docker build as key-value pairs
+    #
+    # Required: false
+    # Default: ""
+
+    docker-config-file:
+    # Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
+    #
+    # Required: false
+    # Default: .docker-config.json
+
+    secrets:
+    # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
     #
     # Required: false
     # Default: ""
