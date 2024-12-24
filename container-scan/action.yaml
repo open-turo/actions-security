@@ -67,7 +67,6 @@ runs:
     - name: Scan Container Image
       id: scan
       uses: lacework/lw-scanner-action@v1.4.3
-      shell: bash
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
