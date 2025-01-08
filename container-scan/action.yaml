@@ -14,6 +14,12 @@ inputs:
     required: false
     default: "true"
     description: Enable Docker build
+  artifactory-username:
+    required: false
+    description: Artifactory username
+  artifactory-auth-token:
+    required: false
+    description: Artifactory auth token
   build-args:
     required: false
     description: List of build arguments for docker build as key-value pairs
@@ -52,13 +58,15 @@ runs:
       id: docker-build
       with:
         docker-config-file: ${{ inputs.docker-config-file }}
-        secrets: ${{ inputs.secrets }}
         dockerhub-user: ${{ inputs.dockerhub-user }}
         dockerhub-password: ${{ inputs.dockerhub-password }}
         github-token: ${{ inputs.github-token }}
         image-platform: ${{ inputs.image-platform }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
+        secrets: |
+          ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
+          ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
 
     - name: Determine Image Name
       id: set_image_name

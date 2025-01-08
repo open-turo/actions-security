@@ -37,6 +37,18 @@ Scans container images for vulnerabilities using Lacework
     # Required: false
     # Default: true
 
+    artifactory-username:
+    # Artifactory username
+    #
+    # Required: false
+    # Default: ""
+
+    artifactory-auth-token:
+    # Artifactory auth token
+    #
+    # Required: false
+    # Default: ""
+
     build-args:
     # List of build arguments for docker build as key-value pairs
     #
