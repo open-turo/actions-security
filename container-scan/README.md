@@ -109,7 +109,7 @@ Scans container images for vulnerabilities using Lacework
     # Required: false
     # Default: ""
 
-    VFUNCTION_FILE_NAME:
+    vfunction-file:
     # Vfunction file name
     #
     # Required: false
