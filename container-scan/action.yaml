@@ -51,6 +51,9 @@ inputs:
   MAX_MIND_LICENSE_KEY:
     required: false
     description: MaxMind License Key
+  VFUNCTION_FILE_NAME:
+    required: false
+    description: Vfunction file name
 
 runs:
   using: composite
@@ -74,7 +77,7 @@ runs:
           ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
           ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
-
+          VFUNCTION_FILE_NAME=${{ inputs.VFUNCTION_FILE_NAME }}
     - name: Determine Image Name
       id: set_image_name
       run: |

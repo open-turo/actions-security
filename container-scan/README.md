@@ -108,6 +108,12 @@ Scans container images for vulnerabilities using Lacework
     #
     # Required: false
     # Default: ""
+
+    VFUNCTION_FILE_NAME:
+    # Vfunction file name
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 ## Usage
