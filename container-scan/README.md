@@ -96,6 +96,18 @@ Scans container images for vulnerabilities using Lacework
     #
     # Required: true
     # Default: ""
+
+    MAX_MIND_USER:
+    # MaxMind User ID
+    #
+    # Required: false
+    # Default: ""
+
+    MAX_MIND_LICENSE_KEY:
+    # MaxMind License Key
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 ## Usage

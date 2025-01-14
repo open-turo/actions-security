@@ -45,6 +45,12 @@ inputs:
   dockerhub-password:
     required: true
     description: DockerHub password
+  MAX_MIND_USER:
+    required: false
+    description: MaxMind User ID
+  MAX_MIND_LICENSE_KEY:
+    required: false
+    description: MaxMind License Key
 
 runs:
   using: composite
@@ -67,6 +73,8 @@ runs:
         secrets: |
           ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
           ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
+          MAX_MIND_USER=${{ inputs.MAX_MIND_USER }}
+          MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
 
     - name: Determine Image Name
       id: set_image_name
