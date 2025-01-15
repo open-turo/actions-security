@@ -1,0 +1,88 @@
+name: Test Scanner Output
+
+on:
+  workflow_dispatch:
+    inputs:
+      image-name:
+        description: "Docker image to scan"
+        required: true
+        default: "nginx"
+      image-tag:
+        description: "Image tag to scan"
+        required: true
+        default: "latest"
+      debug-output:
+        description: "Enable detailed debug output"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  test-scan:
+    runs-on: [self-hosted, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan container image
+        uses: lacework/lw-scanner-action@v1.4.3
+        id: lacework-scan
+        with:
+          LW_ACCOUNT_NAME: ${{ secrets.LW_ACCOUNT_NAME }}
+          LW_ACCESS_TOKEN: ${{ secrets.LW_ACCESS_TOKEN }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          SAVE_RESULTS_IN_LACEWORK: false
+          RESULTS_IN_GITHUB_SUMMARY: true
+
+      - name: Examine results format
+        if: inputs.debug-output
+        run: |
+          echo "=== Full Results Structure ==="
+          jq '.' results.stdout
+
+          echo "=== Vulnerability Counts ==="
+          jq '.evaluation.vulnerabilities' results.stdout
+
+          echo "=== Image Details ==="
+          jq '.image' results.stdout
+
+      - name: Test New Relic payload format
+        run: |
+          # Format data for New Relic
+          jq -n \
+            --arg image_name "${{ inputs.image-name }}" \
+            --arg image_tag "${{ inputs.image-tag }}" \
+            --arg scan_time "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            --arg repo "${{ github.repository }}" \
+            --arg workflow "${{ github.workflow }}" \
+            '{
+              eventType: "ContainerScan",
+              repository: $repo,
+              workflow: $workflow,
+              imageName: $image_name,
+              imageTag: $image_tag,
+              scanTime: $scan_time,
+              criticalCount: (.evaluation.vulnerabilities.critical // 0),
+              highCount: (.evaluation.vulnerabilities.high // 0),
+              mediumCount: (.evaluation.vulnerabilities.medium // 0),
+              lowCount: (.evaluation.vulnerabilities.low // 0),
+              fixableCount: (.evaluation.fixable_vulnerabilities // 0)
+            }' results.stdout > nr_payload.json
+
+          echo "=== New Relic Payload ==="
+          cat nr_payload.json
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: newrelic-payload
+          path: nr_payload.json
+          retention-days: 5
+
+      - name: Upload full results artifact
+        if: inputs.debug-output
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-scan-results
+          path: results.stdout
+          retention-days: 5
