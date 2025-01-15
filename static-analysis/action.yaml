@@ -36,13 +36,35 @@ runs:
 
         echo ""
         echo "=== Checking pipx cache and semgrep binary location ==="
-        # Typically pipx installs packages in ~/.local/pipx
-        # or /opt/pipx_bin, depending on your environment.
-        # We list them here to see what was created.
         if [ -d ~/.local/pipx ]; then
           echo "Contents of ~/.local/pipx:"
           ls -R ~/.local/pipx
         else
           echo "~/.local/pipx directory does not exist."
         fi
+      shell: bash
+
+    - name: Cleanup Semgrep Environment
+      run: |
+        echo "Cleaning up Semgrep environment..."
+
+        # Remove Semgrep virtual environment
+        if [ -d ~/.local/pipx/venvs/semgrep ]; then
+          echo "Removing Semgrep virtual environment..."
+          rm -rf ~/.local/pipx/venvs/semgrep
+        fi
+
+        # Remove pipx cache
+        if [ -d ~/.local/pipx/cache ]; then
+          echo "Removing pipx cache..."
+          rm -rf ~/.local/pipx/cache
+        fi
+
+        # Remove Semgrep runtime files
+        if [ -d ~/.semgrep ]; then
+          echo "Removing Semgrep runtime files..."
+          rm -rf ~/.semgrep
+        fi
+
+        echo "Semgrep environment cleanup completed."
       shell: bash
