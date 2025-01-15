@@ -15,6 +15,34 @@ runs:
       with:
         fetch-depth: 2
 
-    - run: |
+    - name: Run Semgrep
+      run: |
         SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+      shell: bash
+
+    - name: List Semgrep Installation Folders
+      run: |
+        echo "=== pipx list output ==="
+        pipx list
+        echo ""
+
+        echo "=== Checking ~/.semgrep directory ==="
+        if [ -d ~/.semgrep ]; then
+          echo "Contents of ~/.semgrep directory:"
+          ls -la ~/.semgrep
+        else
+          echo "~/.semgrep directory does not exist."
+        fi
+
+        echo ""
+        echo "=== Checking pipx cache and semgrep binary location ==="
+        # Typically pipx installs packages in ~/.local/pipx
+        # or /opt/pipx_bin, depending on your environment.
+        # We list them here to see what was created.
+        if [ -d ~/.local/pipx ]; then
+          echo "Contents of ~/.local/pipx:"
+          ls -R ~/.local/pipx
+        else
+          echo "~/.local/pipx directory does not exist."
+        fi
       shell: bash
