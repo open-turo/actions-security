@@ -9,90 +9,46 @@ inputs:
 runs:
   using: composite
   steps:
-    # Step 1: Set up Python environment
     - uses: open-turo/action-setup-tools@v2
       with:
         python: 3.10.12
 
-    # Step 2: Checkout the repository
     - uses: actions/checkout@v4
       with:
         fetch-depth: 2
 
-    # Step 3: Run Semgrep
     - name: Run Semgrep
       run: |
-        echo "Running Semgrep..."
         SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
       shell: bash
 
-    # Step 4: List Semgrep Installation Folders
-    - name: List Semgrep Installation Folders
-      run: |
-        echo "=== Listing Semgrep-related directories and files ==="
-
-        echo "=== pipx list output ==="
-        pipx list
-        echo ""
-
-        echo "=== Checking ~/.semgrep directory ==="
-        if [ -d ~/.semgrep ]; then
-          echo "Contents of ~/.semgrep directory:"
-          ls -la ~/.semgrep
-        else
-          echo "~/.semgrep directory does not exist."
-        fi
-
-        echo ""
-        echo "=== Checking pipx cache and semgrep binary location ==="
-        if [ -d ~/.local/pipx ]; then
-          echo "Contents of ~/.local/pipx:"
-          ls -R ~/.local/pipx
-        else
-          echo "~/.local/pipx directory does not exist."
-        fi
-      shell: bash
-
     - name: Cleanup Semgrep Environment
-      if: always() # Ensures the step runs even if previous steps fail
       run: |
-        echo "Starting Semgrep environment cleanup..."
+        echo "=== Starting Cleanup ==="
 
-        echo "Checking if ~/.local/pipx/venvs/semgrep exists..."
-        if [ -d ~/.local/pipx/venvs/semgrep ]; then
-          echo "Removing Semgrep virtual environment..."
-          rm -rf ~/.local/pipx/venvs/semgrep
-          echo "Semgrep virtual environment removed."
-        else
-          echo "Semgrep virtual environment does not exist."
-        fi
-
-        echo "Checking if ~/.local/pipx/cache exists..."
-        if [ -d ~/.local/pipx/cache ]; then
-          echo "Removing pipx cache..."
-          rm -rf ~/.local/pipx/cache
-          echo "Pipx cache removed."
-        else
-          echo "Pipx cache does not exist."
-        fi
-
-        echo "Checking if ~/.semgrep exists..."
+        # Remove the Semgrep cache directory if it exists
         if [ -d ~/.semgrep ]; then
-          echo "Removing Semgrep runtime files..."
+          echo "Removing ~/.semgrep directory..."
           rm -rf ~/.semgrep
-          echo "Semgrep runtime files removed."
         else
-          echo "~/.semgrep does not exist."
+          echo "~/.semgrep directory does not exist. Skipping..."
         fi
 
-        echo "Semgrep environment cleanup process completed."
-      shell: bash
+        # Remove pipx installation directory for Semgrep if it exists
+        if [ -d ~/.local/pipx ]; then
+          echo "Removing ~/.local/pipx directory..."
+          rm -rf ~/.local/pipx
+        else
+          echo "~/.local/pipx directory does not exist. Skipping..."
+        fi
 
-    # Step 6: Verify Cleanup
-    - name: Verify Cleanup
-      run: |
-        echo "Verifying cleanup..."
-        [ ! -d ~/.local/pipx/venvs/semgrep ] && echo "Semgrep virtual environment cleaned up." || echo "Semgrep virtual environment still exists."
-        [ ! -d ~/.local/pipx/cache ] && echo "Pipx cache cleaned up." || echo "Pipx cache still exists."
-        [ ! -d ~/.semgrep ] && echo "Semgrep runtime files cleaned up." || echo "~/.semgrep still exists."
+        # Remove any pipx binary folder if it exists
+        if [ -d ~/.local/bin ]; then
+          echo "Removing Semgrep binary from ~/.local/bin..."
+          find ~/.local/bin -name "semgrep*" -exec rm -f {} \;
+        else
+          echo "~/.local/bin directory does not exist. Skipping..."
+        fi
+
+        echo "=== Cleanup Completed ==="
       shell: bash
