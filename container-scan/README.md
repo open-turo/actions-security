@@ -37,8 +37,32 @@ Scans container images for vulnerabilities using Lacework
     # Required: false
     # Default: true
 
+    image-tags:
+    # List of tags as key-value pair attributes
+    #
+    # Required: false
+    # Default: ""
+
+    artifactory-username:
+    # Artifactory username
+    #
+    # Required: false
+    # Default: ""
+
+    artifactory-auth-token:
+    # Artifactory auth token
+    #
+    # Required: false
+    # Default: ""
+
     build-args:
     # List of build arguments for docker build as key-value pairs
+    #
+    # Required: false
+    # Default: ""
+
+    build-contexts:
+    # List of additional build contexts (e.g., name=path)
     #
     # Required: false
     # Default: ""
@@ -83,6 +107,24 @@ Scans container images for vulnerabilities using Lacework
     # DockerHub password
     #
     # Required: true
+    # Default: ""
+
+    MAX_MIND_USER:
+    # MaxMind User ID
+    #
+    # Required: false
+    # Default: ""
+
+    MAX_MIND_LICENSE_KEY:
+    # MaxMind License Key
+    #
+    # Required: false
+    # Default: ""
+
+    vfunction-file:
+    # Vfunction file name
+    #
+    # Required: false
     # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
