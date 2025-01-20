@@ -126,6 +126,12 @@ Scans container images for vulnerabilities using Lacework
     #
     # Required: false
     # Default: ""
+
+    target:
+    # Target build stage for multi-stage Docker builds
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 

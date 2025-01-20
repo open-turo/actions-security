@@ -62,6 +62,9 @@ inputs:
   vfunction-file:
     required: false
     description: Vfunction file name
+  target:
+    required: false
+    description: Target build stage for multi-stage Docker builds
 
 runs:
   using: composite
