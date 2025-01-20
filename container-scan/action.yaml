@@ -14,9 +14,23 @@ inputs:
     required: false
     default: "true"
     description: Enable Docker build
+  image-tags:
+    required: false
+    description: List of tags as key-value pair attributes
+    default: ""
+  artifactory-username:
+    required: false
+    description: Artifactory username
+  artifactory-auth-token:
+    required: false
+    description: Artifactory auth token
   build-args:
     required: false
     description: List of build arguments for docker build as key-value pairs
+  build-contexts:
+    required: false
+    description: List of additional build contexts (e.g., name=path)
+    default: ""
   docker-config-file:
     required: false
     description: Path to the docker config file (defaults to .docker-config.json) Must contain imageName, may contain dockerfile
@@ -39,6 +53,15 @@ inputs:
   dockerhub-password:
     required: true
     description: DockerHub password
+  MAX_MIND_USER:
+    required: false
+    description: MaxMind User ID
+  MAX_MIND_LICENSE_KEY:
+    required: false
+    description: MaxMind License Key
+  vfunction-file:
+    required: false
+    description: Vfunction file name
 
 runs:
   using: composite
@@ -52,14 +75,17 @@ runs:
       id: docker-build
       with:
         docker-config-file: ${{ inputs.docker-config-file }}
-        secrets: ${{ inputs.secrets }}
         dockerhub-user: ${{ inputs.dockerhub-user }}
         dockerhub-password: ${{ inputs.dockerhub-password }}
         github-token: ${{ inputs.github-token }}
         image-platform: ${{ inputs.image-platform }}
         image-version: ${{ inputs.image-tag }}
         build-args: ${{ inputs.build-args }}
-
+        secrets: |
+          ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
+          ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
+          MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
+          VFUNCTION_FILE_NAME=${{ inputs.vfunction-file }}
     - name: Determine Image Name
       id: set_image_name
       run: |
@@ -68,7 +94,7 @@ runs:
 
     - name: Scan Container Image
       id: scan
-      uses: lacework/lw-scanner-action@v1.4.4
+      uses: lacework/lw-scanner-action@v1.4.3
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
