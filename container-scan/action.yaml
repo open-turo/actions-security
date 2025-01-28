@@ -83,12 +83,12 @@ runs:
         github-token: ${{ inputs.github-token }}
         image-platform: ${{ inputs.image-platform }}
         image-version: ${{ inputs.image-tag }}
-        build-args: ${{ inputs.build-args }}
-        secrets: |
+        build-args: |
           ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
           ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
-          VFUNCTION_FILE_NAME=${{ inputs.vfunction-file }}
+          ${{ inputs.build-args }}
+        secrets: ${{ inputs.secrets }}
     - name: Determine Image Name
       id: set_image_name
       run: |
