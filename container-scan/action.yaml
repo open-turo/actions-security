@@ -89,6 +89,7 @@ runs:
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
           ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+        build-contexts: ${{ inputs.build-contexts }}
     - name: Determine Image Name
       id: set_image_name
       run: |
