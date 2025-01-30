@@ -41,6 +41,11 @@ inputs:
     required: false
     description: List of secrets as key-value pairs (e.g., SECRET_KEY=VALUE)
     default: ""
+  build-contexts:
+    required: false
+    description: List of build contexts as key-value pairs (e.g., CONTEXT_KEY=VALUE)
+    default: ""
+
 outputs:
   image-name:
     description: Docker image name
@@ -101,6 +106,7 @@ runs:
         context: .
         platforms: ${{ inputs.image-platform }}
         file: ${{ steps.config.outputs.dockerfile }}
+        build-contexts: ${{ inputs.build-contexts }}
         build-args: |
           GIT_COMMIT=${{ github.sha }}
           GITHUB_TOKEN=${{ inputs.github-token }}
@@ -111,7 +117,6 @@ runs:
           ${{ inputs.build-args }}
         push: ${{ inputs.push }}
         load: ${{ inputs.load }}
-        tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version }}
+        tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version || github.sha }}
         labels: ${{ steps.meta.outputs.labels }}
-        secrets: |
-          ${{ inputs.secrets }}
+        secrets: ${{ inputs.secrets }}
