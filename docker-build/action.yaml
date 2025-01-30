@@ -45,6 +45,7 @@ inputs:
     required: false
     description: List of build contexts as key-value pairs (e.g., CONTEXT_KEY=VALUE)
     default: ""
+
 outputs:
   image-name:
     description: Docker image name
@@ -118,5 +119,4 @@ runs:
         load: ${{ inputs.load }}
         tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version }}
         labels: ${{ steps.meta.outputs.labels }}
-        secrets: |
-          ${{ inputs.secrets }}
+        secrets: ${{ inputs.secrets }}
