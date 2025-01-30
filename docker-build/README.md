@@ -80,6 +80,12 @@ Only builds docker images for the input platform, tags and image version
     #
     # Required: false
     # Default: ""
+
+    build-contexts:
+    # List of build contexts as key-value pairs (e.g., CONTEXT_KEY=VALUE)
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
