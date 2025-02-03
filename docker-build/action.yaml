@@ -16,7 +16,8 @@ inputs:
     required: true
     description: Usually secrets.GITHUB_TOKEN
   image-version:
-    required: true
+    required: false
+    default: ${{ github.sha }}
     description: Docker image version
   image-platform:
     description: Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
@@ -117,6 +118,6 @@ runs:
           ${{ inputs.build-args }}
         push: ${{ inputs.push }}
         load: ${{ inputs.load }}
-        tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version || github.sha }}
+        tags: ${{ steps.config.outputs.image-name }}:${{ inputs.image-version }}
         labels: ${{ steps.meta.outputs.labels }}
         secrets: ${{ inputs.secrets }}

@@ -42,8 +42,8 @@ Only builds docker images for the input platform, tags and image version
     image-version:
     # Docker image version
     #
-    # Required: true
-    # Default: ""
+    # Required: false
+    # Default: ${{ github.sha }}
 
     image-platform:
     # Target platform to build image for (eg. linux/amd64 (default), linux/arm64, etc)
