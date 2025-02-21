@@ -103,6 +103,7 @@ runs:
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
         IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
         IMAGE_TAG: ${{ inputs.image-tag }}
+        DEBUGGING: true
         SAVE_RESULTS_IN_LACEWORK: true
         ADDITIONAL_PARAMETERS: "-j"
 
