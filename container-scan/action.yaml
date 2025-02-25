@@ -97,7 +97,7 @@ runs:
 
     - name: Scan Container Image
       id: scan
-      uses: bilal.s12/lw-scanner-action@bilal/non-root
+      uses: bilals12/lw-scanner-action@bilal/non-root
       with:
         LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
         LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
