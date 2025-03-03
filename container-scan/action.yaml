@@ -1,5 +1,5 @@
 name: Container Security Scan
-description: Scans container images for vulnerabilities using Lacework
+description: Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
 
 inputs:
   image-name:
