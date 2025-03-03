@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-Scans container images for vulnerabilities using Lacework
+Scans container images for vulnerabilities using Lacework (lw-scanner-action@v1.4.5)
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
