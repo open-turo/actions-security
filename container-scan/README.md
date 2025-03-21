@@ -13,6 +13,12 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
 ```yaml
 - uses: @
   with:
+    checkout-repo:
+    # Perform checkout as first step of action
+    #
+    # Required: false
+    # Default: true
+
     image-name:
     # Docker image name
     #

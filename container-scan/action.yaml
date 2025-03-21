@@ -2,6 +2,10 @@ name: Container Security Scan
 description: Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
 
 inputs:
+  checkout-repo:
+    required: false
+    description: Perform checkout as first step of action
+    default: "true"
   image-name:
     required: false
     description: Docker image name
@@ -70,6 +74,7 @@ runs:
   using: composite
   steps:
     - name: Checkout Repository
+      if: inputs.checkout-repo == 'true'
       uses: actions/checkout@v4
 
     - name: Build docker image
