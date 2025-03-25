@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
+Scans container images for vulnerabilities using Wiz CLI
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
@@ -13,12 +13,6 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
 ```yaml
 - uses: @
   with:
-    checkout-repo:
-    # Perform checkout as first step of action
-    #
-    # Required: false
-    # Default: true
-
     image-name:
     # Docker image name
     #
@@ -89,18 +83,6 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
     # List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
     #
     # Required: false
-    # Default: ""
-
-    lw-account-name:
-    # Lacework account name
-    #
-    # Required: true
-    # Default: ""
-
-    lw-access-token:
-    # Lacework access token
-    #
-    # Required: true
     # Default: ""
 
     dockerhub-user:

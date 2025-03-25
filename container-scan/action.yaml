@@ -1,11 +1,7 @@
 name: Container Security Scan
-description: Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
+description: Scans container images for vulnerabilities using Wiz CLI
 
 inputs:
-  checkout-repo:
-    required: false
-    description: Perform checkout as first step of action
-    default: "true"
   image-name:
     required: false
     description: Docker image name
@@ -45,12 +41,6 @@ inputs:
   secrets:
     required: false
     description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
-  lw-account-name:
-    required: true
-    description: Lacework account name
-  lw-access-token:
-    required: true
-    description: Lacework access token
   dockerhub-user:
     required: true
     description: DockerHub username
@@ -74,7 +64,6 @@ runs:
   using: composite
   steps:
     - name: Checkout Repository
-      if: inputs.checkout-repo == 'true'
       uses: actions/checkout@v4
 
     - name: Build docker image
@@ -94,22 +83,53 @@ runs:
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
           ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+
     - name: Determine Image Name
       id: set_image_name
       run: |
         echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
+    - name: Install Wiz CLI
+      run: |
+        # Download the appropriate binary based on OS and architecture
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          if [[ "$RUNNER_ARCH" == "X64" ]]; then
+            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-amd64
+          elif [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-arm64
+          fi
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          if [[ "$RUNNER_ARCH" == "X64" ]]; then
+            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-darwin-amd64
+          elif [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-darwin-arm64
+          fi
+        fi
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+        wizcli version
+      shell: bash
+
+    - name: Configure Wiz CLI
+      run: |
+        # Start device code authentication
+        wizcli auth --use-device-code
+        echo "Please check the GitHub Actions logs for the authentication URL and code."
+        echo "You will need to visit the URL and enter the code to complete authentication."
+        echo "The workflow will wait for you to complete this step."
+        # The workflow will pause here waiting for user interaction
+        read -p "Press Enter after you have completed the authentication..."
+      shell: bash
+
     - name: Scan Container Image
-      id: scan
-      uses: lacework/lw-scanner-action@v1.4.5
-      with:
-        LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
-        LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
-        IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image-tag }}
-        SAVE_RESULTS_IN_LACEWORK: true
-        ADDITIONAL_PARAMETERS: "-j"
+      run: |
+        wizcli docker scan -i ${{ steps.set_image_name.outputs.image_name }}:${{ inputs.image-tag }} \
+          --secrets \
+          --sensitive-data \
+          --show-vulnerability-details \
+          --format human
+      shell: bash
 
     - name: Cleanup Docker Image
       if: always()
