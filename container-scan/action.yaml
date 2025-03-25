@@ -1,11 +1,7 @@
 name: Container Security Scan
-description: Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
+description: Scans container images for vulnerabilities using Wiz CLI
 
 inputs:
-  checkout-repo:
-    required: false
-    description: Perform checkout as first step of action
-    default: "true"
   image-name:
     required: false
     description: Docker image name
@@ -45,12 +41,6 @@ inputs:
   secrets:
     required: false
     description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
-  lw-account-name:
-    required: true
-    description: Lacework account name
-  lw-access-token:
-    required: true
-    description: Lacework access token
   dockerhub-user:
     required: true
     description: DockerHub username
@@ -69,13 +59,113 @@ inputs:
   target:
     required: false
     description: Target build stage for multi-stage Docker builds
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+  container-setup-commands:
+    required: false
+    description: Commands to set up the container environment
+  aws-access-key-id:
+    required: false
+    description: AWS Access Key ID
+  aws-secret-access-key:
+    required: false
+    description: AWS Secret Access Key
+
+outputs:
+  stdout:
+    description: The complete output from the Wiz CLI scan
+    value: ${{ steps.scan.outputs.stdout }}
+  has_findings:
+    description: Whether the scan found any issues
+    value: ${{ steps.scan.outputs.has_findings }}
+  scan_status:
+    description: Status of the scan (success/failure)
+    value: ${{ steps.scan.outputs.scan_status }}
+  vulnerabilities:
+    description: Summary of vulnerability counts
+    value: ${{ steps.scan.outputs.vulnerabilities }}
+  critical_count:
+    description: Count of critical vulnerabilities
+    value: ${{ steps.scan.outputs.critical_count }}
+  high_count:
+    description: Count of high vulnerabilities
+    value: ${{ steps.scan.outputs.high_count }}
+  medium_count:
+    description: Count of medium vulnerabilities
+    value: ${{ steps.scan.outputs.medium_count }}
+  low_count:
+    description: Count of low vulnerabilities
+    value: ${{ steps.scan.outputs.low_count }}
+  scan_url:
+    description: URL to the scan report
+    value: ${{ steps.scan.outputs.scan_url }}
 
 runs:
   using: composite
   steps:
     - name: Checkout Repository
-      if: inputs.checkout-repo == 'true'
       uses: actions/checkout@v4
+
+    - name: Download Wiz CLI
+      run: |
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+      shell: bash
+
+    - name: Authenticate with Wiz
+      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
+      shell: bash
+
+    - name: Setup Tools
+      uses: open-turo/action-setup-tools@v2
+
+    - name: Run Container Setup Commands
+      if: inputs.container-setup-commands != ''
+      shell: bash
+      run: |
+        echo "Running container setup commands after checkout"
+        ${{ inputs.container-setup-commands }}
+      env:
+        # AWS Credentials
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        # Artifactory Credentials
+        ARTIFACTORY_USERNAME: ${{ inputs.artifactory-username }}
+        ARTIFACTORY_AUTH_TOKEN: ${{ inputs.artifactory-auth-token }}
+        # Other common secrets
+        MAX_MIND_LICENSE_KEY: ${{ inputs.MAX_MIND_LICENSE_KEY }}
+        DOCKER_USERNAME: ${{ inputs.dockerhub-user }}
+        DOCKER_PASSWORD: ${{ inputs.dockerhub-password }}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-user }}
+        password: ${{ inputs.dockerhub-password }}
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.image-tag }}
+        flavor: |
+          latest=false
+        tags: |
+          ${{ inputs.image-tags }}
 
     - name: Build docker image
       if: ${{ inputs.enable-docker-build == 'true' }}
@@ -88,31 +178,249 @@ runs:
         github-token: ${{ inputs.github-token }}
         image-platform: ${{ inputs.image-platform }}
         image-version: ${{ inputs.image-tag }}
+        target: ${{ inputs.target }}
+        build-contexts: ${{ inputs.build-contexts }}
         build-args: |
           ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
           ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
           ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+
     - name: Determine Image Name
       id: set_image_name
       run: |
         echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
+    - name: Get Dockerfile Path
+      id: dockerfile-config
+      run: |
+        # Default to Dockerfile in current directory
+        DOCKERFILE="./Dockerfile"
+
+        # Check if docker config file exists and use it if available
+        if [ -f "${{ inputs.docker-config-file }}" ]; then
+          CONFIG_DOCKERFILE=$(jq -r '.dockerfile // ""' ${{ inputs.docker-config-file }})
+          if [ -n "$CONFIG_DOCKERFILE" ]; then
+            DOCKERFILE="$CONFIG_DOCKERFILE"
+          fi
+        fi
+
+        # Verify file exists
+        if [ -f "$DOCKERFILE" ]; then
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+          echo "::warning::Dockerfile not found at $DOCKERFILE, scanning without Dockerfile metadata"
+        fi
+      shell: bash
+
     - name: Scan Container Image
       id: scan
-      uses: lacework/lw-scanner-action@v1.4.5
-      with:
-        LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
-        LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
-        IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image-tag }}
-        SAVE_RESULTS_IN_LACEWORK: true
-        ADDITIONAL_PARAMETERS: "-j"
+      run: |
+        # Build scan command
+        SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
+
+        # Add dockerfile if it exists
+        if [ "${{ steps.dockerfile-config.outputs.dockerfile_exists }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --dockerfile ${{ steps.dockerfile-config.outputs.dockerfile }}"
+        fi
+
+        # Add common scan options with human-readable format
+        SCAN_CMD="$SCAN_CMD --show-vulnerability-details --format human"
+
+        # Define results file for human-readable output
+        RESULTS_FILE="${{ github.workspace }}/results.stdout"
+
+        # Run the scan and capture output and exit code
+        echo "Running scan command: $SCAN_CMD"
+        EXIT_CODE=0
+        SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
+        echo "Scan completed with exit code: $EXIT_CODE"
+
+        # Save human-readable output to results.stdout
+        echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
+
+        # Parse the human-readable output to extract vulnerability counts
+        echo "Extracting counts from human-readable output..."
+
+        # First, try to find the specific vulnerability count line
+        VULN_LINE=$(echo "$SCAN_OUTPUT" | grep "Vulnerabilities:" || echo "")
+
+        if [ -n "$VULN_LINE" ]; then
+          echo "Found vulnerability line: $VULN_LINE"
+
+          # Clean up ANSI color codes for more reliable parsing
+          CLEAN_VULN_LINE=$(echo "$VULN_LINE" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
+          echo "Clean vulnerability line: $CLEAN_VULN_LINE"
+
+          # Extract numbers with direct pattern matching
+          CRITICAL_COUNT=$(echo "$CLEAN_VULN_LINE" | grep -o "CRITICAL: [0-9]\+" | sed 's/CRITICAL: //' || echo "0")
+          HIGH_COUNT=$(echo "$CLEAN_VULN_LINE" | grep -o "HIGH: [0-9]\+" | sed 's/HIGH: //' || echo "0")
+          MEDIUM_COUNT=$(echo "$CLEAN_VULN_LINE" | grep -o "MEDIUM: [0-9]\+" | sed 's/MEDIUM: //' || echo "0")
+          LOW_COUNT=$(echo "$CLEAN_VULN_LINE" | grep -o "LOW: [0-9]\+" | sed 's/LOW: //' || echo "0")
+        else
+          # If no vulnerability line found, try the traditional method
+          CRITICAL_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "Critical: [0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+          HIGH_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "High: [0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+          MEDIUM_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "Medium: [0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+          LOW_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "Low: [0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+
+          # Try alternative patterns
+          if [ "$CRITICAL_COUNT" -eq 0 ] && [ "$HIGH_COUNT" -eq 0 ] && [ "$MEDIUM_COUNT" -eq 0 ] && [ "$LOW_COUNT" -eq 0 ]; then
+            echo "Trying alternative patterns for vulnerability counts..."
+            CRITICAL_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "CRITICAL:[[:space:]]*[0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+            HIGH_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "HIGH:[[:space:]]*[0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+            MEDIUM_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "MEDIUM:[[:space:]]*[0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+            LOW_COUNT=$(echo "$SCAN_OUTPUT" | grep -o "LOW:[[:space:]]*[0-9]\+" | head -1 | grep -o "[0-9]\+" || echo "0")
+          fi
+        fi
+
+        # Ensure we have valid numbers
+        [[ -z "$CRITICAL_COUNT" ]] && CRITICAL_COUNT=0
+        [[ -z "$HIGH_COUNT" ]] && HIGH_COUNT=0
+        [[ -z "$MEDIUM_COUNT" ]] && MEDIUM_COUNT=0
+        [[ -z "$LOW_COUNT" ]] && LOW_COUNT=0
+
+        # Validate counts are numbers
+        [[ "$CRITICAL_COUNT" =~ ^[0-9]+$ ]] || CRITICAL_COUNT=0
+        [[ "$HIGH_COUNT" =~ ^[0-9]+$ ]] || HIGH_COUNT=0
+        [[ "$MEDIUM_COUNT" =~ ^[0-9]+$ ]] || MEDIUM_COUNT=0
+        [[ "$LOW_COUNT" =~ ^[0-9]+$ ]] || LOW_COUNT=0
+
+        # Extract report URL from human-readable output
+        REPORT_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+
+        echo "Extracted vulnerability counts:"
+        echo "Critical: $CRITICAL_COUNT"
+        echo "High: $HIGH_COUNT"
+        echo "Medium: $MEDIUM_COUNT"
+        echo "Low: $LOW_COUNT"
+        echo "Report URL: $REPORT_URL"
+
+        # Export counts as outputs
+        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+        echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+        echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+
+        # Create a clean vulnerability summary string
+        VULN_SUMMARY="CRITICAL: $CRITICAL_COUNT, HIGH: $HIGH_COUNT, MEDIUM: $MEDIUM_COUNT, LOW: $LOW_COUNT"
+        echo "vulnerabilities=$VULN_SUMMARY" >> $GITHUB_OUTPUT
+        echo "report_url=$REPORT_URL" >> $GITHUB_OUTPUT
+        echo "scan_url=$REPORT_URL" >> $GITHUB_OUTPUT
+
+        # Create a cleaned version of scan results (without ANSI colors) for better processing
+        CLEAN_SCAN=$(echo "$SCAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
+        echo "$CLEAN_SCAN" > "${{ github.workspace }}/results.clean"
+
+        # Truncate stdout if too large for GitHub actions output
+        MAX_LENGTH=1000000  # GitHub has limits on output size
+        TRUNCATED_OUTPUT="${SCAN_OUTPUT:0:$MAX_LENGTH}"
+        if [ ${#SCAN_OUTPUT} -gt $MAX_LENGTH ]; then
+          TRUNCATED_OUTPUT="${TRUNCATED_OUTPUT}... (output truncated, see results.stdout for full output)"
+        fi
+        echo "stdout<<EOF" >> $GITHUB_OUTPUT
+        echo "$TRUNCATED_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Process exit code and set appropriate status
+        if [ "$EXIT_CODE" -eq 4 ] || [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=warning" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues: $VULN_SUMMARY"
+        elif [ "$EXIT_CODE" -ne 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::error::Container scan failed with exit code $EXIT_CODE"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "Container scan completed successfully with no issues found"
+        fi
+      shell: bash
+
+    - name: Process scan results
+      run: |
+        # Check if we have a results file
+        if [ -f "${{ github.workspace }}/results.stdout" ]; then
+          echo "Scan results saved to ${{ github.workspace }}/results.stdout ($(wc -c < ${{ github.workspace}}/results.stdout) bytes)"
+
+          # escape scan output for JSON
+          SCAN_OUTPUT=$(cat "${{ github.workspace }}//results.clean" | jq -Rs .)
+
+          # Create a JSON file with the scan details for the HTML report
+          cat > "${{ github.workspace }}/results.json" << EOL
+          {
+            "scanOutput": ${SCAN_OUTPUT},
+            "criticalCount": ${{ steps.scan.outputs.critical_count }},
+            "highCount": ${{ steps.scan.outputs.high_count }},
+            "mediumCount": ${{ steps.scan.outputs.medium_count }},
+            "lowCount": ${{ steps.scan.outputs.low_count }},
+            "scanStatus": "${{ steps.scan.outputs.scan_status }}",
+            "reportUrl": "${{ steps.scan.outputs.report_url }}"
+          }
+        EOL
+          echo "Created JSON data file for HTML report"
+        else
+          echo "::error::No scan results file found at ${{ github.workspace }}/results.stdout"
+          touch "${{ github.workspace}}/results.stdout"
+          echo "{}" > "${{ github.workspace}}/results.json"
+        fi
+      shell: bash
+
+    - name: Fetch digest of Docker image for Graph enrichment
+      id: tag-image
+      continue-on-error: true # Don't fail the workflow if this step fails
+      run: |
+        # make sure we have a proper image tag
+        IMAGE_WITH_TAG="${{ steps.docker-build.outputs.image-with-tag }}"
+
+        if [ -n "$IMAGE_WITH_TAG" ]; then
+          echo "using image: $IMAGE_WITH_TAG"
+
+          # image should be available locally
+          docker image inspect "$IMAGE_WITH_TAG" &>/dev/null || {
+            echo "image not found locally. attempting to pull..."
+            docker pull "$IMAGE_WITH_TAG" || echo "failed to pull image. will tag anyway!"
+          }
+
+          # first, try to get the image digest
+          LOCAL_DIGEST=$(docker inspect "$IMAGE_WITH_TAG" --format '{{.Id}}' | sed 's/^sha256://')
+          echo "local image digest: $LOCAL_DIGEST"
+
+          # push image to get registry digest
+          echo "pushing image to registry..."
+          PUSH_OUTPUT=$(docker push "$IMAGE_WITH_TAG" 2>&1)
+          echo "$PUSH_OUTPUT"
+
+          # extract digest from push output
+          REGISTRY_DIGEST=$(echo "$PUSH_OUTPUT" | grep -o "digest: sha256:[a-f0-9]\+" | head -1 | cut -d':' -f3)
+
+          if [ -n "$REGISTRY_DIGEST" ]; then
+            echo "found registry digest: sha256:$REGISTRY_DIGEST"
+            REPO_PATH=$(echo "$IMAGE_WITH_TAG" | cut -d: -f1)
+            IMAGE_WITH_DIGEST="${REPO_PATH}@sha256:${REGISTRY_DIGEST}"
+            echo "using pushed image reference with digest: $IMAGE_WITH_DIGEST"
+
+            # tag in Wiz using registry digest
+            wizcli docker tag --image "$IMAGE_WITH_DIGEST" && \
+            echo "successfully tagged image in Wiz"
+          else
+            echo "could not extract registry digest, trying with tag reference..."
+            wizcli docker tag --image "$IMAGE_WITH_TAG" && \
+            echo "successfully tagged image in Wiz using tag reference"
+          fi
+        else
+          echo "::warning::no image tag provided - skipping Wiz tagging step"
+        fi
+      shell: bash
 
     - name: Cleanup Docker Image
       if: always()
       run: |
-        docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }} || true
+        docker image rm ${{ steps.docker-build.outputs.image-with-tag }} || true
       shell: bash
