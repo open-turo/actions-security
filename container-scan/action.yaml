@@ -131,11 +131,17 @@ runs:
     - name: Scan Container Image
       id: scan
       run: |
-        wizcli docker scan -i ${{ steps.set_image_name.outputs.image_name }}:${{ inputs.image-tag }} \
+        # Run the scan and capture output
+        SCAN_OUTPUT=$(wizcli docker scan -i ${{ steps.set_image_name.outputs.image_name }}:${{ inputs.image-tag }} \
           --secrets \
           --sensitive-data \
           --show-vulnerability-details \
-          --format human
+          --format human)
+
+        # Set the output for the action
+        echo "stdout<<EOF" >> $GITHUB_OUTPUT
+        echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Cleanup Docker Image
