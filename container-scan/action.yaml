@@ -120,7 +120,7 @@ runs:
     - name: Configure Wiz CLI
       run: |
         # Configure Wiz CLI with service account credentials
-        wizcli auth --client-id ${{ inputs.wiz-client-id }} --client-secret ${{ inputs.wiz-client-secret }}
+        wizcli auth --id ${{ inputs.wiz-client-id }} --secret ${{ inputs.wiz-client-secret }}
       shell: bash
 
     - name: Scan Container Image
