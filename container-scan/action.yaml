@@ -66,6 +66,11 @@ inputs:
     required: true
     description: Wiz Client Secret for service account authentication
 
+outputs:
+  stdout:
+    description: The complete output from the Wiz CLI scan
+    value: ${{ steps.scan.outputs.stdout }}
+
 runs:
   using: composite
   steps:
@@ -124,6 +129,7 @@ runs:
       shell: bash
 
     - name: Scan Container Image
+      id: scan
       run: |
         wizcli docker scan -i ${{ steps.set_image_name.outputs.image_name }}:${{ inputs.image-tag }} \
           --secrets \
