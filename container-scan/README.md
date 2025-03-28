@@ -120,6 +120,36 @@ Scans container images for vulnerabilities using Wiz CLI
     #
     # Required: false
     # Default: ""
+
+    wiz-client-id:
+    # Wiz Client ID for service account authentication
+    #
+    # Required: true
+    # Default: ""
+
+    wiz-client-secret:
+    # Wiz Client Secret for service account authentication
+    #
+    # Required: true
+    # Default: ""
+
+    container-setup-commands:
+    # Commands to set up the container environment
+    #
+    # Required: false
+    # Default: ""
+
+    aws-access-key-id:
+    # AWS Access Key ID
+    #
+    # Required: false
+    # Default: ""
+
+    aws-secret-access-key:
+    # AWS Secret Access Key
+    #
+    # Required: false
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
