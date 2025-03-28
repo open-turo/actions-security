@@ -59,6 +59,12 @@ inputs:
   target:
     required: false
     description: Target build stage for multi-stage Docker builds
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
 
 runs:
   using: composite
@@ -113,13 +119,8 @@ runs:
 
     - name: Configure Wiz CLI
       run: |
-        # Start device code authentication
-        wizcli auth --use-device-code
-        echo "Please check the GitHub Actions logs for the authentication URL and code."
-        echo "You will need to visit the URL and enter the code to complete authentication."
-        echo "The workflow will wait for you to complete this step."
-        # The workflow will pause here waiting for user interaction
-        read -p "Press Enter after you have completed the authentication..."
+        # Configure Wiz CLI with service account credentials
+        wizcli auth --client-id ${{ inputs.wiz-client-id }} --client-secret ${{ inputs.wiz-client-secret }}
       shell: bash
 
     - name: Scan Container Image

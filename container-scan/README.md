@@ -120,6 +120,18 @@ Scans container images for vulnerabilities using Wiz CLI
     #
     # Required: false
     # Default: ""
+
+    wiz-client-id:
+    # Wiz Client ID for service account authentication
+    #
+    # Required: true
+    # Default: ""
+
+    wiz-client-secret:
+    # Wiz Client Secret for service account authentication
+    #
+    # Required: true
+    # Default: ""
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
