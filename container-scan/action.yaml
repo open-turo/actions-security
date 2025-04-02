@@ -77,10 +77,18 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Pull Wiz CLI Docker Image
+    - name: Download Wiz CLI
       run: |
-        docker pull public-registry.wiz.io/wiz-app/wizcli:0
-        docker tag public-registry.wiz.io/wiz-app/wizcli:0 wizcli:latest
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+      shell: bash
+
+    - name: Authenticate with Wiz
+      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
       shell: bash
 
     - name: Build docker image
@@ -111,12 +119,7 @@ runs:
       id: scan
       run: |
         # Run the scan with enhanced options
-        SCAN_OUTPUT=$(docker run --rm \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -e WIZ_CLIENT_ID=${{ inputs.wiz-client-id }} \
-          -e WIZ_CLIENT_SECRET=${{ inputs.wiz-client-secret }} \
-          wizcli:latest \
-          docker scan \
+        SCAN_OUTPUT=$(wizcli docker scan \
           --image ${{ inputs.image-tag }} \
           --policy "Default vulnerabilities policy" \
           --secrets \
@@ -128,6 +131,10 @@ runs:
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Fetch digest of Docker image for Graph enrichment
+      run: wizcli docker tag --image ${{ inputs.image-tag }}
       shell: bash
 
     - name: Cleanup Docker Image
