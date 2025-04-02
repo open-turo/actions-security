@@ -77,68 +77,54 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    - name: Pull Wiz CLI Docker Image
+      run: |
+        docker pull public-registry.wiz.io/wiz-app/wizcli:0
+        docker tag public-registry.wiz.io/wiz-app/wizcli:0 wizcli:latest
+      shell: bash
+
     - name: Build docker image
       if: ${{ inputs.enable-docker-build == 'true' }}
-      uses: open-turo/actions-security/docker-build@v3
-      id: docker-build
-      with:
-        docker-config-file: ${{ inputs.docker-config-file }}
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-password: ${{ inputs.dockerhub-password }}
-        github-token: ${{ inputs.github-token }}
-        image-platform: ${{ inputs.image-platform }}
-        image-version: ${{ inputs.image-tag }}
-        build-args: |
-          ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
-          ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
-          MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
-          ${{ inputs.build-args }}
-        secrets: ${{ inputs.secrets }}
-
-    - name: Determine Image Name
-      id: set_image_name
       run: |
-        echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Install Wiz CLI
-      run: |
-        # Download the appropriate binary based on OS and architecture
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          if [[ "$RUNNER_ARCH" == "X64" ]]; then
-            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-amd64
-          elif [[ "$RUNNER_ARCH" == "ARM64" ]]; then
-            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-arm64
-          fi
-        elif [[ "$RUNNER_OS" == "macOS" ]]; then
-          if [[ "$RUNNER_ARCH" == "X64" ]]; then
-            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-darwin-amd64
-          elif [[ "$RUNNER_ARCH" == "ARM64" ]]; then
-            curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli-darwin-arm64
-          fi
+        # Set up build context if provided
+        BUILD_CONTEXT="."
+        if [ -n "${{ inputs.build-contexts }}" ]; then
+          BUILD_CONTEXT="${{ inputs.build-contexts }}"
         fi
-        chmod +x wizcli
-        sudo mv wizcli /usr/local/bin/
-        wizcli version
-      shell: bash
 
-    - name: Configure Wiz CLI
-      run: |
-        # Configure Wiz CLI with service account credentials
-        wizcli auth --id ${{ inputs.wiz-client-id }} --secret ${{ inputs.wiz-client-secret }}
+        # Build the image with all provided arguments
+        docker build \
+          --platform ${{ inputs.image-platform || 'linux/amd64' }} \
+          --tag ${{ inputs.image-tag }} \
+          --build-arg VERSION=${{ github.sha }} \
+          --build-arg REVISION=${{ github.sha }} \
+          --build-arg BRANCH=${{ github.ref_name }} \
+          --build-arg ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }} \
+          --build-arg ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }} \
+          --build-arg MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }} \
+          ${{ inputs.build-args }} \
+          ${{ inputs.target != '' && format('--target {0}', inputs.target) || '' }} \
+          $BUILD_CONTEXT
       shell: bash
 
     - name: Scan Container Image
       id: scan
       run: |
-        # Run the scan and capture output
-        SCAN_OUTPUT=$(wizcli docker scan -i ${{ steps.set_image_name.outputs.image_name }}:${{ inputs.image-tag }} \
+        # Run the scan with enhanced options
+        SCAN_OUTPUT=$(docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -e WIZ_CLIENT_ID=${{ inputs.wiz-client-id }} \
+          -e WIZ_CLIENT_SECRET=${{ inputs.wiz-client-secret }} \
+          wizcli:latest \
+          docker scan \
+          --image ${{ inputs.image-tag }} \
+          --policy "Default vulnerabilities policy" \
           --secrets \
           --sensitive-data \
           --show-vulnerability-details \
           --format human)
 
-        # Set the output for the action
+        # Save the output for later use
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -147,5 +133,5 @@ runs:
     - name: Cleanup Docker Image
       if: always()
       run: |
-        docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }} || true
+        docker image rm ${{ inputs.image-tag }} || true
       shell: bash
