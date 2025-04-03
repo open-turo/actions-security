@@ -91,28 +91,50 @@ runs:
         WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
       shell: bash
 
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-user }}
+        password: ${{ inputs.dockerhub-password }}
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.image-tag }}
+        flavor: |
+          latest=false
+        tags: |
+          ${{ inputs.image-tags }}
+
     - name: Build docker image
       if: ${{ inputs.enable-docker-build == 'true' }}
-      run: |
-        # Set up build context if provided
-        BUILD_CONTEXT="."
-        if [ -n "${{ inputs.build-contexts }}" ]; then
-          BUILD_CONTEXT="${{ inputs.build-contexts }}"
-        fi
+      uses: open-turo/actions-security/docker-build@v3
+      id: docker-build
+      with:
+        docker-config-file: ${{ inputs.docker-config-file }}
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-password: ${{ inputs.dockerhub-password }}
+        github-token: ${{ inputs.github-token }}
+        image-platform: ${{ inputs.image-platform }}
+        image-version: ${{ inputs.image-tag }}
+        build-args: |
+          ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
+          ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
+          MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
+          ${{ inputs.build-args }}
+        secrets: ${{ inputs.secrets }}
 
-        # Build the image with all provided arguments
-        docker build \
-          --platform ${{ inputs.image-platform || 'linux/amd64' }} \
-          --tag ${{ inputs.image-tag }} \
-          --build-arg VERSION=${{ github.sha }} \
-          --build-arg REVISION=${{ github.sha }} \
-          --build-arg BRANCH=${{ github.ref_name }} \
-          --build-arg ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }} \
-          --build-arg ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }} \
-          --build-arg MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }} \
-          ${{ inputs.build-args }} \
-          ${{ inputs.target != '' && format('--target {0}', inputs.target) || '' }} \
-          $BUILD_CONTEXT
+    - name: Determine Image Name
+      id: set_image_name
+      run: |
+        echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Scan Container Image
@@ -120,7 +142,7 @@ runs:
       run: |
         # Run the scan with enhanced options
         SCAN_OUTPUT=$(wizcli docker scan \
-          --image ${{ inputs.image-tag }} \
+          --image ${{ steps.docker-build.outputs.image-with-tag }} \
           --policy "Default vulnerabilities policy" \
           --secrets \
           --sensitive-data \
@@ -134,11 +156,11 @@ runs:
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
-      run: wizcli docker tag --image ${{ inputs.image-tag }}
+      run: wizcli docker tag --image ${{ steps.docker-build.outputs.image-with-tag }}
       shell: bash
 
     - name: Cleanup Docker Image
       if: always()
       run: |
-        docker image rm ${{ inputs.image-tag }} || true
+        docker image rm ${{ steps.docker-build.outputs.image-with-tag }} || true
       shell: bash
