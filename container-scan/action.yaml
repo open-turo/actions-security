@@ -169,29 +169,48 @@ runs:
         # Add common scan options
         SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format human"
 
-        # Run the scan and capture output and exit code
-        echo "Running scan command: $SCAN_CMD"
+        # Run the scan and capture output
         SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
 
-        # Save the output
+        # Save the output for debugging and verification
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Interpret the exit code
-        if [ "$EXIT_CODE" -eq 4 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=warning" >> $GITHUB_OUTPUT
-          echo "::warning::Container scan found security issues that need to be addressed"
-        elif [ "$EXIT_CODE" -ne 0 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=failure" >> $GITHUB_OUTPUT
-          echo "::error::Container scan failed with exit code $EXIT_CODE"
-        else
-          echo "has_findings=false" >> $GITHUB_OUTPUT
-          echo "scan_status=success" >> $GITHUB_OUTPUT
-          echo "Container scan completed successfully with no issues found"
-        fi
+        # Extract vulnerability information
+        CRITICAL_COUNT=$(echo "$SCAN_OUTPUT" | grep -c "Severity: CRITICAL")
+        HIGH_COUNT=$(echo "$SCAN_OUTPUT" | grep -c "Severity: HIGH")
+        SCAN_REPORT_URL=$(echo "$SCAN_OUTPUT" | grep "Scan report:" | cut -d' ' -f3)
+
+        # Extract critical and high vulnerabilities with descriptions
+        CRITICAL_VULNS=$(echo "$SCAN_OUTPUT" | awk '/Severity: CRITICAL/{p=1;v=$0;next} p&&/Description:/{print v "\n" $0; p=0}')
+        HIGH_VULNS=$(echo "$SCAN_OUTPUT" | awk '/Severity: HIGH/{p=1;v=$0;next} p&&/Description:/{print v "\n" $0; p=0}')
+
+        # Set outputs
+        echo "has_findings=$([ "$EXIT_CODE" -eq 4 ] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
+        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+        echo "scan_report_url=$SCAN_REPORT_URL" >> $GITHUB_OUTPUT
+        echo "critical_vulns<<EOF" >> $GITHUB_OUTPUT
+        echo "$CRITICAL_VULNS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "high_vulns<<EOF" >> $GITHUB_OUTPUT
+        echo "$HIGH_VULNS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Handle exit codes
+        case $EXIT_CODE in
+          0)
+            echo "Container scan completed successfully with no issues found"
+            ;;
+          4)
+            echo "::warning::Container scan found security issues that need to be addressed"
+            ;;
+          *)
+            echo "::error::Container scan failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+            ;;
+        esac
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
