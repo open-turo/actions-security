@@ -144,7 +144,6 @@ runs:
         SCAN_OUTPUT=$(wizcli docker scan \
           --image ${{ steps.docker-build.outputs.image-with-tag }} \
           --dockerfile ${{ steps.docker-build.outputs.dockerfile }} \
-          --policy "Default vulnerabilities policy" \
           --secrets \
           --sensitive-data \
           --show-vulnerability-details \

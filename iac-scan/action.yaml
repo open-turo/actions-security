@@ -1,0 +1,129 @@
+name: IaC Security Scan
+description: Scans Infrastructure as Code and correlates with cloud resources using Wiz CLI
+
+inputs:
+  terraform-dir:
+    required: false
+    description: Directory containing Terraform files
+    default: "."
+  aws-region:
+    required: false
+    description: AWS region to scan
+    default: "us-west-2"
+  platform:
+    required: false
+    description: IaC platform to scan (terraform, cloudformation, etc.)
+    default: "terraform"
+  cloud-platform:
+    required: false
+    description: Cloud platform to scan (aws, azure, gcp)
+    default: "aws"
+  format:
+    required: false
+    description: Output format (human, json)
+    default: "human"
+  policy:
+    required: false
+    description: Wiz policy to use for scanning
+    default: "Default IaC policy"
+  show-details:
+    required: false
+    description: Show detailed findings
+    default: "true"
+  correlate-iac:
+    required: false
+    description: Correlate cloud resources with IaC
+    default: "true"
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+  aws-access-key-id:
+    required: false
+    description: AWS Access Key ID for cloud scanning
+  aws-secret-access-key:
+    required: false
+    description: AWS Secret Access Key for cloud scanning
+
+outputs:
+  stdout:
+    description: The complete output from the Wiz CLI scan
+    value: ${{ steps.scan.outputs.stdout }}
+  findings:
+    description: JSON output of findings (if format is json)
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download Wiz CLI
+      run: |
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+      shell: bash
+
+    - name: Authenticate with Wiz
+      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
+      shell: bash
+
+    - name: Configure AWS Credentials
+      if: ${{ inputs.cloud-platform == 'aws' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Scan IaC and Cloud Resources
+      id: scan
+      run: |
+        # Build scan command
+        SCAN_CMD="wizcli iac scan"
+        SCAN_CMD="$SCAN_CMD --directory ${{ inputs.terraform-dir }}"
+        SCAN_CMD="$SCAN_CMD --platform ${{ inputs.platform }}"
+        SCAN_CMD="$SCAN_CMD --policy \"${{ inputs.policy }}\""
+        SCAN_CMD="$SCAN_CMD --format ${{ inputs.format }}"
+
+        if [ "${{ inputs.show-details }}" = "true" ]; then
+          SCAN_CMD="$SCAN_CMD --show-details"
+        fi
+
+        # Run IaC scan
+        echo "Running IaC scan..."
+        SCAN_OUTPUT=$($SCAN_CMD)
+
+        # If cloud correlation is enabled, run cloud scan
+        if [ "${{ inputs.correlate-iac }}" = "true" ]; then
+          echo "Running cloud scan with IaC correlation..."
+          CLOUD_CMD="wizcli cloud scan"
+          CLOUD_CMD="$CLOUD_CMD --platform ${{ inputs.cloud-platform }}"
+          CLOUD_CMD="$CLOUD_CMD --region ${{ inputs.aws-region }}"
+          CLOUD_CMD="$CLOUD_CMD --correlate-iac"
+          CLOUD_CMD="$CLOUD_CMD --format ${{ inputs.format }}"
+          CLOUD_CMD="$CLOUD_CMD --policy \"${{ inputs.policy }}\""
+
+          if [ "${{ inputs.show-details }}" = "true" ]; then
+            CLOUD_CMD="$CLOUD_CMD --show-details"
+          fi
+
+          CLOUD_OUTPUT=$($CLOUD_CMD)
+          SCAN_OUTPUT="$SCAN_OUTPUT\n\n$CLOUD_OUTPUT"
+        fi
+
+        # Save outputs
+        echo "stdout<<EOF" >> $GITHUB_OUTPUT
+        echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        if [ "${{ inputs.format }}" = "json" ]; then
+          echo "findings<<EOF" >> $GITHUB_OUTPUT
+          echo "$SCAN_OUTPUT" | jq '.' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
