@@ -146,71 +146,85 @@ runs:
     - name: Get Dockerfile Path
       id: dockerfile-config
       run: |
-        if [ ! -f "${{ inputs.docker-config-file }}" ]; then
-          echo "::error::Docker config file not found: ${{ inputs.docker-config-file }}" && exit 1
+        # Default to Dockerfile in current directory
+        DOCKERFILE="./Dockerfile"
+
+        # Check if docker config file exists and use it if available
+        if [ -f "${{ inputs.docker-config-file }}" ]; then
+          CONFIG_DOCKERFILE=$(jq -r '.dockerfile // ""' ${{ inputs.docker-config-file }})
+          if [ -n "$CONFIG_DOCKERFILE" ]; then
+            DOCKERFILE="$CONFIG_DOCKERFILE"
+          fi
         fi
-        dockerfile=$(jq -r '.dockerfile // "./Dockerfile"' ${{ inputs.docker-config-file }})
-        echo "dockerfile=${dockerfile}" >> $GITHUB_OUTPUT
+
+        # Verify file exists
+        if [ -f "$DOCKERFILE" ]; then
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+          echo "::warning::Dockerfile not found at $DOCKERFILE, scanning without Dockerfile metadata"
+        fi
       shell: bash
 
     - name: Scan Container Image
       id: scan
       run: |
-        # Check if Dockerfile exists
-        DOCKERFILE_PATH="${{ steps.dockerfile-config.outputs.dockerfile }}"
-        if [ ! -f "$DOCKERFILE_PATH" ]; then
-          echo "Warning: Dockerfile not found at $DOCKERFILE_PATH, scanning without Dockerfile metadata"
-          SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
-        else
-          echo "Using Dockerfile at: $DOCKERFILE_PATH"
-          SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }} --dockerfile $DOCKERFILE_PATH"
+        # Build scan command
+        SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
+
+        # Add dockerfile if it exists
+        if [ "${{ steps.dockerfile-config.outputs.dockerfile_exists }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --dockerfile ${{ steps.dockerfile-config.outputs.dockerfile }}"
+        fi
+
+        # Add severity threshold if specified
+        if [ -n "${{ inputs.severity-threshold }}" ]; then
+          SCAN_CMD="$SCAN_CMD --severity ${{ inputs.severity-threshold }}"
         fi
 
         # Add common scan options
-        SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format human"
+        SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format json"
 
-        # Run the scan and capture output
+        # Run the scan and capture output and exit code
+        echo "Running scan command: $SCAN_CMD"
+        SCAN_OUTPUT=""
+        EXIT_CODE=0
         SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
 
-        # Save the output for debugging and verification
+        # If using JSON format, also get a human-readable version for logs
+        if [[ $SCAN_CMD == *"--format json"* ]]; then
+          echo "Scan completed with exit code: $EXIT_CODE"
+          echo "$SCAN_OUTPUT" > scan_results.json
+
+          # Get a human-readable version for logs
+          HUMAN_CMD="${SCAN_CMD/--format json/--format human}"
+          HUMAN_OUTPUT=$($HUMAN_CMD 2>&1) || true
+          echo "$HUMAN_OUTPUT" > scan_results.txt
+        else
+          echo "$SCAN_OUTPUT" > scan_results.txt
+        fi
+
+        # Save the output
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
-        echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
+        cat scan_results.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Extract vulnerability information
-        CRITICAL_COUNT=$(echo "$SCAN_OUTPUT" | grep -c "Severity: CRITICAL")
-        HIGH_COUNT=$(echo "$SCAN_OUTPUT" | grep -c "Severity: HIGH")
-        SCAN_REPORT_URL=$(echo "$SCAN_OUTPUT" | grep "Scan report:" | cut -d' ' -f3)
-
-        # Extract critical and high vulnerabilities with descriptions
-        CRITICAL_VULNS=$(echo "$SCAN_OUTPUT" | awk '/Severity: CRITICAL/{p=1;v=$0;next} p&&/Description:/{print v "\n" $0; p=0}')
-        HIGH_VULNS=$(echo "$SCAN_OUTPUT" | awk '/Severity: HIGH/{p=1;v=$0;next} p&&/Description:/{print v "\n" $0; p=0}')
-
-        # Set outputs
-        echo "has_findings=$([ "$EXIT_CODE" -eq 4 ] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
-        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
-        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
-        echo "scan_report_url=$SCAN_REPORT_URL" >> $GITHUB_OUTPUT
-        echo "critical_vulns<<EOF" >> $GITHUB_OUTPUT
-        echo "$CRITICAL_VULNS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        echo "high_vulns<<EOF" >> $GITHUB_OUTPUT
-        echo "$HIGH_VULNS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-
-        # Handle exit codes
-        case $EXIT_CODE in
-          0)
-            echo "Container scan completed successfully with no issues found"
-            ;;
-          4)
-            echo "::warning::Container scan found security issues that need to be addressed"
-            ;;
-          *)
-            echo "::error::Container scan failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
-            ;;
-        esac
+        # Process exit code
+        if [ "$EXIT_CODE" -eq 4 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=warning" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues that need to be addressed"
+        elif [ "$EXIT_CODE" -ne 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::error::Container scan failed with exit code $EXIT_CODE"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "Container scan completed successfully with no issues found"
+        fi
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
