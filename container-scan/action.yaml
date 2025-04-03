@@ -175,7 +175,7 @@ runs:
         # Add common scan options
         SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format human"
 
-        # Run the scan and capture both stdout and exit code
+        # Run the scan and capture both stdout and stderr
         echo "Running scan command: $SCAN_CMD"
         SCAN_OUTPUT=$($SCAN_CMD 2>&1)
         SCAN_EXIT_CODE=$?
@@ -185,15 +185,21 @@ runs:
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Check if scan found any issues
-        if echo "$SCAN_OUTPUT" | grep -q "ERROR:"; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=failure" >> $GITHUB_OUTPUT
-          echo "::warning::Container scan found security issues that need to be addressed"
-        else
+        # Check scan results
+        if [ $SCAN_EXIT_CODE -eq 0 ]; then
           echo "has_findings=false" >> $GITHUB_OUTPUT
           echo "scan_status=success" >> $GITHUB_OUTPUT
           echo "Container scan completed successfully with no issues found"
+        elif [ $SCAN_EXIT_CODE -eq 4 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues that need to be addressed"
+          echo "::notice::Scan completed with findings. Please review the scan output above."
+        else
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=error" >> $GITHUB_OUTPUT
+          echo "::error::Container scan failed with exit code $SCAN_EXIT_CODE"
+          echo "::notice::Please check the scan output above for details."
         fi
 
         # Always exit with 0 to prevent workflow failure
