@@ -137,17 +137,41 @@ runs:
         echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
+    - name: Get Dockerfile Path
+      id: dockerfile-config
+      run: |
+        if [ ! -f "${{ inputs.docker-config-file }}" ]; then
+          echo "::error::Docker config file not found: ${{ inputs.docker-config-file }}" && exit 1
+        fi
+        dockerfile=$(jq -r '.dockerfile // "./Dockerfile"' ${{ inputs.docker-config-file }})
+        echo "dockerfile=${dockerfile}" >> $GITHUB_OUTPUT
+      shell: bash
+
     - name: Scan Container Image
       id: scan
       run: |
-        # Run the scan with enhanced options
-        SCAN_OUTPUT=$(wizcli docker scan \
-          --image ${{ steps.docker-build.outputs.image-with-tag }} \
-          --dockerfile ${{ steps.docker-build.outputs.dockerfile }} \
-          --secrets \
-          --sensitive-data \
-          --show-vulnerability-details \
-          --format human)
+        # Debug current directory and Dockerfile path
+        echo "Current directory: $(pwd)"
+        echo "Dockerfile path from config: ${{ steps.dockerfile-config.outputs.dockerfile }}"
+        echo "Directory contents:"
+        ls -la
+
+        # Check if Dockerfile exists
+        DOCKERFILE_PATH="${{ steps.dockerfile-config.outputs.dockerfile }}"
+        if [ ! -f "$DOCKERFILE_PATH" ]; then
+          echo "Warning: Dockerfile not found at $DOCKERFILE_PATH, scanning without Dockerfile metadata"
+          SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
+        else
+          echo "Using Dockerfile at: $DOCKERFILE_PATH"
+          SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }} --dockerfile $DOCKERFILE_PATH"
+        fi
+
+        # Add common scan options
+        SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format human"
+
+        # Run the scan
+        echo "Running scan command: $SCAN_CMD"
+        SCAN_OUTPUT=$($SCAN_CMD)
 
         # Save the output for later use
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
