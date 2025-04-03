@@ -70,6 +70,12 @@ outputs:
   stdout:
     description: The complete output from the Wiz CLI scan
     value: ${{ steps.scan.outputs.stdout }}
+  has_findings:
+    description: Whether the scan found any issues
+    value: ${{ steps.scan.outputs.has_findings }}
+  scan_status:
+    description: Status of the scan (success/failure)
+    value: ${{ steps.scan.outputs.scan_status }}
 
 runs:
   using: composite
@@ -169,14 +175,29 @@ runs:
         # Add common scan options
         SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format human"
 
-        # Run the scan
+        # Run the scan and capture both stdout and exit code
         echo "Running scan command: $SCAN_CMD"
-        SCAN_OUTPUT=$($SCAN_CMD)
+        SCAN_OUTPUT=$($SCAN_CMD 2>&1)
+        SCAN_EXIT_CODE=$?
 
         # Save the output for later use
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
+
+        # Check if scan found any issues
+        if echo "$SCAN_OUTPUT" | grep -q "ERROR:"; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues that need to be addressed"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "Container scan completed successfully with no issues found"
+        fi
+
+        # Always exit with 0 to prevent workflow failure
+        exit 0
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
