@@ -195,7 +195,20 @@ runs:
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
-      run: wizcli docker tag --image ${{ steps.docker-build.outputs.image-with-tag }}
+      id: tag-image
+      continue-on-error: true # Don't fail the workflow if this step fails
+      run: |
+        # First, try to get the image digest
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ steps.docker-build.outputs.image-with-tag }} 2>/dev/null || echo "")
+
+        if [ -z "$DIGEST" ]; then
+          echo "::warning::Cannot get image digest - skipping Wiz tagging step"
+          echo "No image digest available. Tagging in Wiz will be skipped."
+        else
+          echo "Found image digest: $DIGEST"
+          # Only run the wizcli tag command if we have a digest
+          wizcli docker tag --image ${{ steps.docker-build.outputs.image-with-tag }}
+        fi
       shell: bash
 
     - name: Cleanup Docker Image
