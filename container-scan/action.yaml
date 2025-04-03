@@ -1,11 +1,7 @@
 name: Container Security Scan
-description: Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
+description: Scans container images for vulnerabilities using Wiz CLI
 
 inputs:
-  checkout-repo:
-    required: false
-    description: Perform checkout as first step of action
-    default: "true"
   image-name:
     required: false
     description: Docker image name
@@ -45,12 +41,6 @@ inputs:
   secrets:
     required: false
     description: List of secrets for docker build as key-value pairs (e.g., SECRET_KEY=VALUE)
-  lw-account-name:
-    required: true
-    description: Lacework account name
-  lw-access-token:
-    required: true
-    description: Lacework access token
   dockerhub-user:
     required: true
     description: DockerHub username
@@ -69,13 +59,65 @@ inputs:
   target:
     required: false
     description: Target build stage for multi-stage Docker builds
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+
+outputs:
+  stdout:
+    description: The complete output from the Wiz CLI scan
+    value: ${{ steps.scan.outputs.stdout }}
+  has_findings:
+    description: Whether the scan found any issues
+    value: ${{ steps.scan.outputs.has_findings }}
+  scan_status:
+    description: Status of the scan (success/failure)
+    value: ${{ steps.scan.outputs.scan_status }}
 
 runs:
   using: composite
   steps:
     - name: Checkout Repository
-      if: inputs.checkout-repo == 'true'
       uses: actions/checkout@v4
+
+    - name: Download Wiz CLI
+      run: |
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+      shell: bash
+
+    - name: Authenticate with Wiz
+      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
+      shell: bash
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-user }}
+        password: ${{ inputs.dockerhub-password }}
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.image-tag }}
+        flavor: |
+          latest=false
+        tags: |
+          ${{ inputs.image-tags }}
 
     - name: Build docker image
       if: ${{ inputs.enable-docker-build == 'true' }}
@@ -94,25 +136,116 @@ runs:
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
           ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+
     - name: Determine Image Name
       id: set_image_name
       run: |
         echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
       shell: bash
 
+    - name: Get Dockerfile Path
+      id: dockerfile-config
+      run: |
+        # Default to Dockerfile in current directory
+        DOCKERFILE="./Dockerfile"
+
+        # Check if docker config file exists and use it if available
+        if [ -f "${{ inputs.docker-config-file }}" ]; then
+          CONFIG_DOCKERFILE=$(jq -r '.dockerfile // ""' ${{ inputs.docker-config-file }})
+          if [ -n "$CONFIG_DOCKERFILE" ]; then
+            DOCKERFILE="$CONFIG_DOCKERFILE"
+          fi
+        fi
+
+        # Verify file exists
+        if [ -f "$DOCKERFILE" ]; then
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "dockerfile=$DOCKERFILE" >> $GITHUB_OUTPUT
+          echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+          echo "::warning::Dockerfile not found at $DOCKERFILE, scanning without Dockerfile metadata"
+        fi
+      shell: bash
+
     - name: Scan Container Image
       id: scan
-      uses: lacework/lw-scanner-action@v1.4.5
-      with:
-        LW_ACCOUNT_NAME: ${{ inputs.lw-account-name }}
-        LW_ACCESS_TOKEN: ${{ inputs.lw-access-token }}
-        IMAGE_NAME: ${{ steps.set_image_name.outputs.image_name }}
-        IMAGE_TAG: ${{ inputs.image-tag }}
-        SAVE_RESULTS_IN_LACEWORK: true
-        ADDITIONAL_PARAMETERS: "-j"
+      run: |
+        # Build scan command
+        SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
+
+        # Add dockerfile if it exists
+        if [ "${{ steps.dockerfile-config.outputs.dockerfile_exists }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --dockerfile ${{ steps.dockerfile-config.outputs.dockerfile }}"
+        fi
+
+        # Add severity threshold if specified
+        if [ -n "${{ inputs.severity-threshold }}" ]; then
+          SCAN_CMD="$SCAN_CMD --severity ${{ inputs.severity-threshold }}"
+        fi
+
+        # Add common scan options
+        SCAN_CMD="$SCAN_CMD --secrets --sensitive-data --show-vulnerability-details --format json"
+
+        # Run the scan and capture output and exit code
+        echo "Running scan command: $SCAN_CMD"
+        SCAN_OUTPUT=""
+        EXIT_CODE=0
+        SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
+
+        # If using JSON format, also get a human-readable version for logs
+        if [[ $SCAN_CMD == *"--format json"* ]]; then
+          echo "Scan completed with exit code: $EXIT_CODE"
+          echo "$SCAN_OUTPUT" > scan_results.json
+
+          # Get a human-readable version for logs
+          HUMAN_CMD="${SCAN_CMD/--format json/--format human}"
+          HUMAN_OUTPUT=$($HUMAN_CMD 2>&1) || true
+          echo "$HUMAN_OUTPUT" > scan_results.txt
+        else
+          echo "$SCAN_OUTPUT" > scan_results.txt
+        fi
+
+        # Save the output
+        echo "stdout<<EOF" >> $GITHUB_OUTPUT
+        cat scan_results.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Process exit code
+        if [ "$EXIT_CODE" -eq 4 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=warning" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues that need to be addressed"
+        elif [ "$EXIT_CODE" -ne 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::error::Container scan failed with exit code $EXIT_CODE"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "Container scan completed successfully with no issues found"
+        fi
+      shell: bash
+
+    - name: Fetch digest of Docker image for Graph enrichment
+      id: tag-image
+      continue-on-error: true # Don't fail the workflow if this step fails
+      run: |
+        # First, try to get the image digest
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ steps.docker-build.outputs.image-with-tag }} 2>/dev/null || echo "")
+
+        if [ -z "$DIGEST" ]; then
+          echo "::warning::Cannot get image digest - skipping Wiz tagging step"
+          echo "No image digest available. Tagging in Wiz will be skipped."
+        else
+          echo "Found image digest: $DIGEST"
+          # Only run the wizcli tag command if we have a digest
+          wizcli docker tag --image ${{ steps.docker-build.outputs.image-with-tag }}
+        fi
+      shell: bash
 
     - name: Cleanup Docker Image
       if: always()
       run: |
-        docker image rm ${{ steps.docker-build.outputs.image-name }}:${{ inputs.image-tag }} || true
+        docker image rm ${{ steps.docker-build.outputs.image-with-tag }} || true
       shell: bash
