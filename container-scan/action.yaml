@@ -156,12 +156,6 @@ runs:
     - name: Scan Container Image
       id: scan
       run: |
-        # Debug current directory and Dockerfile path
-        echo "Current directory: $(pwd)"
-        echo "Dockerfile path from config: ${{ steps.dockerfile-config.outputs.dockerfile }}"
-        echo "Directory contents:"
-        ls -la
-
         # Check if Dockerfile exists
         DOCKERFILE_PATH="${{ steps.dockerfile-config.outputs.dockerfile }}"
         if [ ! -f "$DOCKERFILE_PATH" ]; then
@@ -178,34 +172,22 @@ runs:
         # Run the scan and capture output
         echo "Running scan command: $SCAN_CMD"
         SCAN_OUTPUT=$($SCAN_CMD 2>&1)
-        SCAN_EXIT_CODE=$?
 
         # Save the output
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "$SCAN_OUTPUT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Set status based on exit code
-        case $SCAN_EXIT_CODE in
-          0)
-            echo "has_findings=false" >> $GITHUB_OUTPUT
-            echo "scan_status=success" >> $GITHUB_OUTPUT
-            echo "Container scan completed successfully with no issues found"
-            ;;
-          4)
-            echo "has_findings=true" >> $GITHUB_OUTPUT
-            echo "scan_status=failure" >> $GITHUB_OUTPUT
-            echo "::warning::Container scan found security issues that need to be addressed"
-            ;;
-          *)
-            echo "has_findings=true" >> $GITHUB_OUTPUT
-            echo "scan_status=error" >> $GITHUB_OUTPUT
-            echo "::error::Container scan failed with exit code $SCAN_EXIT_CODE"
-            ;;
-        esac
-
-        # Always exit with 0 to prevent workflow failure
-        exit 0
+        # Set status based on output content
+        if echo "$SCAN_OUTPUT" | grep -q "ERROR:"; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::warning::Container scan found security issues that need to be addressed"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "Container scan completed successfully with no issues found"
+        fi
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
