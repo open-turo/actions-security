@@ -9,7 +9,7 @@ runs:
   steps:
     - uses: open-turo/action-setup-tools@v2
       with:
-        python: 3.10.12
+        python: 3.13.2
 
     - uses: actions/checkout@v4
       with:
