@@ -4,6 +4,10 @@ inputs:
   semgrep-app-token:
     required: true
     description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
+  config:
+    required: false
+    default: ""
+    description: Optional Semgrep config name (e.g., p/secrets)
 runs:
   using: composite
   steps:
@@ -20,5 +24,11 @@ runs:
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+        if [ -n "${{ inputs.config }}" ]; then
+          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" \
+            pipx run --spec semgrep==1.101.0 semgrep ci --config "${{ inputs.config }}"
+        else
+          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" \
+            pipx run --spec semgrep==1.101.0 semgrep ci
+        fi
       shell: bash
