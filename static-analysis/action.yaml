@@ -4,10 +4,10 @@ inputs:
   semgrep-app-token:
     required: true
     description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
-  config:
+  secrets-ony:
     required: false
     default: ""
-    description: Optional Semgrep config name (e.g., p/secrets)
+    description: "If 'true', run 'semgrep ci --secrets' instead of full scan"
 runs:
   using: composite
   steps:
@@ -24,10 +24,12 @@ runs:
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
-        if [ -n "${{ inputs.config }}" ]; then
+        if [ "${{ inputs.secrets-only }}" = "true" ]; then
+          echo "Running Semgrep secrets-only scan"
           SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" \
-            pipx run --spec semgrep==1.101.0 semgrep ci --config "${{ inputs.config }}"
+            pipx run --spec semgrep==1.101.0 semgrep ci --secrets
         else
+          echo "Running full Semgrep CI scan"
           SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" \
             pipx run --spec semgrep==1.101.0 semgrep ci
         fi

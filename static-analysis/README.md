@@ -19,8 +19,8 @@ GitHub Action that scans code changes being made and posts security findings as 
     # Required: true
     # Default: ""
 
-    config:
-    # Optional Semgrep config name (e.g., p/secrets)
+    secrets-ony:
+    # If 'true', run 'semgrep ci --secrets' instead of full scan
     #
     # Required: false
     # Default: ""
