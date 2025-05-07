@@ -232,14 +232,27 @@ runs:
         # Add common scan options
         SCAN_CMD="$SCAN_CMD --show-vulnerability-details --format json"
 
+        # Add output file option
+        RESULTS_FILE="${{ github.workspace }}/results.stdout"
+        SCAN_CMD="$SCAN_CMD --output $RESULTS_FILE,json"
+
         # Run the scan and capture output and exit code
         echo "Running scan command: $SCAN_CMD"
         EXIT_CODE=0
         SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
         echo "Scan completed with exit code: $EXIT_CODE"
 
-        # Save JSON output to file for processing
-        echo "$SCAN_OUTPUT" > scan_results.json
+        # Check if output file was created (wizcli should create it)
+        if [ -f "$RESULTS_FILE" ]; then
+          echo "Wiz scan results saved to $RESULTS_FILE"
+        else
+          # Fallback: save output to file for processing
+          echo "Output file not created by wizcli, saving scan output manually"
+          echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
+        fi
+
+        # Also save to scan_results.json for backward compatibility
+        cp "$RESULTS_FILE" scan_results.json
 
         if grep -q '"vulnerabilities":{' scan_results.json; then
           echo "Found analytics.vulnerabilities section, extracting counts..."
