@@ -297,15 +297,8 @@ runs:
 
         echo "report_url=$REPORT_URL" >> $GITHUB_OUTPUT
 
-        # Save the human-readable output for the PR comment
-        HUMAN_CMD="${SCAN_CMD/--format json/--format human}"
-        echo "Running human-readable scan for logs: $HUMAN_CMD"
-        HUMAN_OUTPUT=$($HUMAN_CMD 2>&1) || true
-        echo "$HUMAN_OUTPUT" > scan_results.txt
-
         # Save the output
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
-        cat scan_results.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
         # Process exit code and set appropriate status
