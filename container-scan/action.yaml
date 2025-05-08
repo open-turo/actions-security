@@ -361,6 +361,7 @@ runs:
           fi
         else
           echo "::warning::no image tag provided - skipping Wiz tagging step"
+        fi
       shell: bash
 
     - name: Cleanup Docker Image
