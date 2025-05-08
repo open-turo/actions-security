@@ -245,6 +245,18 @@ runs:
         # Check if output file was created (wizcli should create it)
         if [ -f "$RESULTS_FILE" ]; then
           echo "Wiz scan results saved to $RESULTS_FILE"
+
+          # debug block
+          echo "::group::Scan Results JSON (Preview)"
+          head -c 1000 "$RESULTS_FILE" | cat
+          echo -e "\n... (truncated) ..."
+          echo "::endgroup::"
+          echo "::group::Scan Results Structure"
+          echo "file size: $(wc -c < "$RESULTS_FILE") bytes"
+          echo "Contains OSPackages section: $(grep -q '"osPackages"' "$RESULTS_FILE" && echo "YES" || echo "NO")"
+          echo "Number of packages: $(grep -o '"name":' "$RESULTS_FILE" | wc -l)"
+          echo "Number of vulnerabilities: $(grep -o '"vulnerabilities":\[' "$RESULTS_FILE" | wc -l)"
+          echo "::endgroup::"
         else
           # Fallback: save output to file for processing
           echo "Output file not created by wizcli, saving scan output manually"
@@ -252,7 +264,7 @@ runs:
         fi
 
         # Also save to scan_results.json for backward compatibility
-        cp "$RESULTS_FILE" scan_results.json
+        cp "$RESULTS_FILE" scan_results.json"
 
         if grep -q '"vulnerabilities":{' scan_results.json; then
           echo "Found analytics.vulnerabilities section, extracting counts..."
