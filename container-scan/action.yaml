@@ -264,7 +264,7 @@ runs:
         fi
 
         # Also save to scan_results.json for backward compatibility
-        cp "$RESULTS_FILE" scan_results.json"
+        cp "$RESULTS_FILE" scan_results.json
 
         if grep -q '"vulnerabilities":{' scan_results.json; then
           echo "Found analytics.vulnerabilities section, extracting counts..."
