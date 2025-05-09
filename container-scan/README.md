@@ -4,7 +4,7 @@
 <!-- action-docs-description source="action.yaml" -->
 ## Description
 
-Scans container images for vulnerabilities using Lacework's inline scanner (v1.4.5)
+Scans container images for vulnerabilities using Wiz CLI
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
@@ -13,12 +13,6 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
 ```yaml
 - uses: @
   with:
-    checkout-repo:
-    # Perform checkout as first step of action
-    #
-    # Required: false
-    # Default: true
-
     image-name:
     # Docker image name
     #
@@ -91,18 +85,6 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
     # Required: false
     # Default: ""
 
-    lw-account-name:
-    # Lacework account name
-    #
-    # Required: true
-    # Default: ""
-
-    lw-access-token:
-    # Lacework access token
-    #
-    # Required: true
-    # Default: ""
-
     dockerhub-user:
     # DockerHub username
     #
@@ -135,6 +117,36 @@ Scans container images for vulnerabilities using Lacework's inline scanner (v1.4
 
     target:
     # Target build stage for multi-stage Docker builds
+    #
+    # Required: false
+    # Default: ""
+
+    wiz-client-id:
+    # Wiz Client ID for service account authentication
+    #
+    # Required: true
+    # Default: ""
+
+    wiz-client-secret:
+    # Wiz Client Secret for service account authentication
+    #
+    # Required: true
+    # Default: ""
+
+    container-setup-commands:
+    # Commands to set up the container environment
+    #
+    # Required: false
+    # Default: ""
+
+    aws-access-key-id:
+    # AWS Access Key ID
+    #
+    # Required: false
+    # Default: ""
+
+    aws-secret-access-key:
+    # AWS Secret Access Key
     #
     # Required: false
     # Default: ""
