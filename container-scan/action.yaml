@@ -245,6 +245,18 @@ runs:
         # Check if output file was created (wizcli should create it)
         if [ -f "$RESULTS_FILE" ]; then
           echo "Wiz scan results saved to $RESULTS_FILE"
+
+          # debug block
+          echo "::group::Scan Results JSON (Preview)"
+          head -c 1000 "$RESULTS_FILE" | cat
+          echo -e "\n... (truncated) ..."
+          echo "::endgroup::"
+          echo "::group::Scan Results Structure"
+          echo "file size: $(wc -c < "$RESULTS_FILE") bytes"
+          echo "Contains OSPackages section: $(grep -q '"osPackages"' "$RESULTS_FILE" && echo "YES" || echo "NO")"
+          echo "Number of packages: $(grep -o '"name":' "$RESULTS_FILE" | wc -l)"
+          echo "Number of vulnerabilities: $(grep -o '"vulnerabilities":\[' "$RESULTS_FILE" | wc -l)"
+          echo "::endgroup::"
         else
           # Fallback: save output to file for processing
           echo "Output file not created by wizcli, saving scan output manually"
@@ -320,7 +332,7 @@ runs:
     - name: Preserve scan results
       run: |
         cp "${{ github.workspace }}/results.stdout" "${{ github.workspace}}/results.json"
-        echo "Scan results preserved at ${{ github.workspace }}/results.json ($wc -c < ${{ github.workspace}}/results.json) bytes"
+        echo "Scan results preserved at ${{ github.workspace }}/results.json ($(wc -c < ${{ github.workspace}}/results.json) bytes)"
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
