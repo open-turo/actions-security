@@ -245,18 +245,6 @@ runs:
         # Check if output file was created (wizcli should create it)
         if [ -f "$RESULTS_FILE" ]; then
           echo "Wiz scan results saved to $RESULTS_FILE"
-
-          # debug block
-          echo "::group::Scan Results JSON (Preview)"
-          head -c 1000 "$RESULTS_FILE" | cat
-          echo -e "\n... (truncated) ..."
-          echo "::endgroup::"
-          echo "::group::Scan Results Structure"
-          echo "file size: $(wc -c < "$RESULTS_FILE") bytes"
-          echo "Contains OSPackages section: $(grep -q '"osPackages"' "$RESULTS_FILE" && echo "YES" || echo "NO")"
-          echo "Number of packages: $(grep -o '"name":' "$RESULTS_FILE" | wc -l)"
-          echo "Number of vulnerabilities: $(grep -o '"vulnerabilities":\[' "$RESULTS_FILE" | wc -l)"
-          echo "::endgroup::"
         else
           # Fallback: save output to file for processing
           echo "Output file not created by wizcli, saving scan output manually"
@@ -332,15 +320,7 @@ runs:
     - name: Preserve scan results
       run: |
         cp "${{ github.workspace }}/results.stdout" "${{ github.workspace}}/results.json"
-        # validate JSON formate
-        echo "validating JSON format..."
-        python3 -c "import json; f=open('${{ github.workspace }}//results.json'); json.load(f); f.close(); print('JSON is valid')" || echo "WARNING: JSON validation failed"
-        # check file contents
-        echo "file size: $(wc -c < ${{ github.workspace}}/results.json) bytes"
-        echo "contains osPackages: $(grep -c '\"osPackages\"' ${{ github.workspace}}/results.json || echo 0)"
-        echo "package count: $(grep -c '\"name\":' ${{ github.workspace }}/results.json || echo 0)"
-        # osPackages should be an array
-        python3 -c 'import json; f=open("${{ github.workspace }}/results.json"); data=json.load(f); f.close(); print(f"osPackages type: {type(data.get(\"result\", {}).get(\"osPackages\", None))}")' || echo "ERROR: Failed to check osPackages type"
+        echo "Scan results preserved at ${{ github.workspace }}/results.json ($wc -c < ${{ github.workspace}}/results.json) bytes"
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
