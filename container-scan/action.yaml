@@ -257,11 +257,20 @@ runs:
         # Extract vulnerability counts using jq if available
         if command -v jq >/dev/null 2>&1; then
           echo "Extracting vulnerability counts using jq..."
-          CRITICAL_COUNT=$(jq -r '.criticalCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
-          HIGH_COUNT=$(jq -r '.highCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
-          MEDIUM_COUNT=$(jq -r '.mediumCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
-          LOW_COUNT=$(jq -r '.lowCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
-          REPORT_URL=$(jq -r '.reportUrl // ""' "$RESULTS_FILE" 2>/dev/null || echo "")
+          # Get counts from the correct nested location
+          CRITICAL_COUNT=$(jq -r '.analytics.vulnerabilityResultAnalytics.criticalCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
+          HIGH_COUNT=$(jq -r '.analytics.vulnerabilityResultAnalytics.highCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
+          MEDIUM_COUNT=$(jq -r '.analytics.vulnerabilityResultAnalytics.mediumCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
+          LOW_COUNT=$(jq -r '.analytics.vulnerabilityResultAnalytics.lowCount // 0' "$RESULTS_FILE" 2>/dev/null || echo 0)
+          REPORT_URL=$(jq -r '.reportUrl // .rawAuditLogRecord.cliDetails.scanDetails.webLink // ""' "$RESULTS_FILE" 2>/dev/null || echo "")
+
+          # If we still don't have the report URL, try deeper paths
+          if [ -z "$REPORT_URL" ]; then
+            SCAN_ID=$(jq -r '.rawAuditLogRecord.cliDetails.scanDetails.scanID // ""' "$RESULTS_FILE" 2>/dev/null || echo "")
+            if [ -n "$SCAN_ID" ]; then
+              REPORT_URL="https://app.wiz.io/findings/cicd-scans#~%2528cicd_scan~%2527$SCAN_ID%252A"
+            fi
+          fi
         else
           # Fallback to grep method if jq not available
           echo "jq not available, extracting counts using grep..."
