@@ -232,9 +232,9 @@ runs:
         # Add common scan options
         SCAN_CMD="$SCAN_CMD --show-vulnerability-details --format json"
 
-        # Add output file option
-        RESULTS_FILE="${{ github.workspace }}/results.stdout"
-        SCAN_CMD="$SCAN_CMD --output $RESULTS_FILE,json"
+        # Add output file option for raw results
+        RAW_RESULTS="${{ github.workspace }}/raw_results.stdout"
+        SCAN_CMD="$SCAN_CMD --output $RAW_RESULTS,json"
 
         # Run the scan and capture output and exit code
         echo "Running scan command: $SCAN_CMD"
@@ -242,60 +242,110 @@ runs:
         SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
         echo "Scan completed with exit code: $EXIT_CODE"
 
-        # Check if output file was created (wizcli should create it)
-        if [ -f "$RESULTS_FILE" ]; then
-          echo "Wiz scan results saved to $RESULTS_FILE"
+        # Define the output JSON file path
+        RESULTS_JSON="${{ github.workspace }}/results.json"
 
-          # debug block
-          echo "::group::Scan Results JSON (Preview)"
-          head -c 1000 "$RESULTS_FILE" | cat
-          echo -e "\n... (truncated) ..."
-          echo "::endgroup::"
-          echo "::group::Scan Results Structure"
-          echo "file size: $(wc -c < "$RESULTS_FILE") bytes"
-          echo "Contains OSPackages section: $(grep -q '"osPackages"' "$RESULTS_FILE" && echo "YES" || echo "NO")"
-          echo "Number of packages: $(grep -o '"name":' "$RESULTS_FILE" | wc -l)"
-          echo "Number of vulnerabilities: $(grep -o '"vulnerabilities":\[' "$RESULTS_FILE" | wc -l)"
-          echo "::endgroup::"
-        else
-          # Fallback: save output to file for processing
-          echo "Output file not created by wizcli, saving scan output manually"
-          echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
-        fi
-
-        # Also save to scan_results.json for backward compatibility
-        cp "$RESULTS_FILE" scan_results.json
-
-        if grep -q '"vulnerabilities":{' scan_results.json; then
+        # Extract vulnerability counts - this is the most important data
+        if grep -q '"vulnerabilities":{' "$RAW_RESULTS"; then
           echo "Found analytics.vulnerabilities section, extracting counts..."
-          CRITICAL_COUNT=$(grep -o '"criticalCount":[0-9]\+' scan_results.json | head -1 | grep -o '[0-9]\+' || echo "0")
-          HIGH_COUNT=$(grep -o '"highCount":[0-9]\+' scan_results.json | head -1 | grep -o '[0-9]\+' || echo "0")
-          MEDIUM_COUNT=$(grep -o '"mediumCount":[0-9]\+' scan_results.json | head -1 | grep -o '[0-9]\+' || echo "0")
-          LOW_COUNT=$(grep -o '"lowCount":[0-9]\+' scan_results.json | head -1 | grep -o '[0-9]\+' || echo "0")
+          CRITICAL_COUNT=$(grep -o '"criticalCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          HIGH_COUNT=$(grep -o '"highCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          MEDIUM_COUNT=$(grep -o '"mediumCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          LOW_COUNT=$(grep -o '"lowCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          INFO_COUNT=$(grep -o '"infoCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          TOTAL_COUNT=$(grep -o '"totalCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
+          UNFIXED_COUNT=$(grep -o '"unfixedCount":[0-9]\+' "$RAW_RESULTS" | head -1 | grep -o '[0-9]\+' || echo "0")
         else
           # Fallback to counting individual CVEs with each severity
           echo "No analytics section found, counting individual vulnerabilities..."
-          CRITICAL_COUNT=$(grep -o '"severity":"CRITICAL"' scan_results.json | wc -l)
-          HIGH_COUNT=$(grep -o '"severity":"HIGH"' scan_results.json | wc -l)
-          MEDIUM_COUNT=$(grep -o '"severity":"MEDIUM"' scan_results.json | wc -l)
-          LOW_COUNT=$(grep -o '"severity":"LOW"' scan_results.json | wc -l)
+          CRITICAL_COUNT=$(grep -o '"severity":"CRITICAL"' "$RAW_RESULTS" | wc -l)
+          HIGH_COUNT=$(grep -o '"severity":"HIGH"' "$RAW_RESULTS" | wc -l)
+          MEDIUM_COUNT=$(grep -o '"severity":"MEDIUM"' "$RAW_RESULTS" | wc -l)
+          LOW_COUNT=$(grep -o '"severity":"LOW"' "$RAW_RESULTS" | wc -l)
+          INFO_COUNT=$(grep -o '"severity":"INFO"' "$RAW_RESULTS" | wc -l)
+          TOTAL_COUNT=$((CRITICAL_COUNT + HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT + INFO_COUNT))
+          UNFIXED_COUNT=0
         fi
 
+        # Ensure numeric values
         [[ "$CRITICAL_COUNT" =~ ^[0-9]+$ ]] || CRITICAL_COUNT=0
         [[ "$HIGH_COUNT" =~ ^[0-9]+$ ]] || HIGH_COUNT=0
         [[ "$MEDIUM_COUNT" =~ ^[0-9]+$ ]] || MEDIUM_COUNT=0
         [[ "$LOW_COUNT" =~ ^[0-9]+$ ]] || LOW_COUNT=0
+        [[ "$INFO_COUNT" =~ ^[0-9]+$ ]] || INFO_COUNT=0
+        [[ "$TOTAL_COUNT" =~ ^[0-9]+$ ]] || TOTAL_COUNT=$((CRITICAL_COUNT + HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT + INFO_COUNT))
+        [[ "$UNFIXED_COUNT" =~ ^[0-9]+$ ]] || UNFIXED_COUNT=0
+
+        # Extract report URL
+        REPORT_URL=$(grep -o '"reportUrl":"[^"]*"' "$RAW_RESULTS" | head -1 | sed 's/"reportUrl":"\(.*\)"/\1/')
+
+        # Set scan status
+        if [ "$EXIT_CODE" -eq 4 ] || [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+          SCAN_STATUS="warning"
+          HAS_FINDINGS="true"
+        elif [ "$EXIT_CODE" -ne 0 ]; then
+          SCAN_STATUS="failure"
+          HAS_FINDINGS="true"
+        else
+          SCAN_STATUS="success"
+          HAS_FINDINGS="false"
+        fi
+
+        # Extract image name
+        IMAGE_NAME="${{ steps.docker-build.outputs.image-with-tag }}"
+        IMAGE_TAG="${{ inputs.image-tag || github.sha }}"
+
+        # Prepare scanId
+        SCAN_ID=$(grep -o '"id":"[^"]*"' "$RAW_RESULTS" | head -1 | grep -o '[^"]*"' | grep -o '[^"]*')
+        [[ -z "$SCAN_ID" ]] && SCAN_ID="wiz-scan-$(date +%s)"
+
+        # Create a clean, simple JSON file
+        cat > "$RESULTS_JSON" << EOL
+        {
+          "scanId": "${SCAN_ID}",
+          "imageName": "${IMAGE_NAME}",
+          "imageTag": "${IMAGE_TAG}",
+          "criticalCount": ${CRITICAL_COUNT},
+          "highCount": ${HIGH_COUNT},
+          "mediumCount": ${MEDIUM_COUNT},
+          "lowCount": ${LOW_COUNT},
+          "infoCount": ${INFO_COUNT},
+          "totalCount": ${TOTAL_COUNT},
+          "unfixedCount": ${UNFIXED_COUNT},
+          "scanStatus": "${SCAN_STATUS}",
+          "reportUrl": "${REPORT_URL}",
+          "hasFindings": ${HAS_FINDINGS}
+        }
+        EOL
+
+        echo "Created simplified results.json with vulnerability counts"
+        cat "$RESULTS_JSON"
+
+        # Extract the critical and high vulnerabilities for detailed reporting
+        # First check if there are any detailed findings to extract
+        if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+          echo "Extracting detailed vulnerability information for critical and high severity findings..."
+
+          # Create a detailed findings file - this is optional and can be skipped if you prefer to keep it simple
+          DETAILED_JSON="${{ github.workspace }}/detailed_findings.json"
+
+          # We'll use sed commands to extract vulnerability sections - these are more reliable than complex JSON parsing
+
+          # 1. First try to extract the most critical findings (typically in OS packages or libraries)
+          # This simplified approach extracts vulnerability blobs from the JSON
+          # This is a bit of a hack, but works well enough without requiring jq
+          cat "$RAW_RESULTS" | tr -d '\n' | sed 's/},{/},\n{/g' | grep -E '"severity":"(CRITICAL|HIGH)"' > "$DETAILED_JSON" || true
+
+          echo "Extracted $(wc -l < "$DETAILED_JSON") detailed findings for critical/high vulnerabilities"
+        fi
 
         echo "Extracted vulnerability counts:"
         echo "Critical: $CRITICAL_COUNT"
         echo "High: $HIGH_COUNT"
         echo "Medium: $MEDIUM_COUNT"
         echo "Low: $LOW_COUNT"
-
-        # Extract report URL if present
-        REPORT_URL=$(grep -o '"reportUrl":"[^"]*"' scan_results.json | head -1 | sed 's/"reportUrl":"\(.*\)"/\1/')
-
-        echo "Extracted report URL $REPORT_URL"
+        echo "Total: $TOTAL_COUNT"
+        echo "Report URL: $REPORT_URL"
 
         # Export counts as outputs
         echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
@@ -306,33 +356,29 @@ runs:
         # Create a clean vulnerability summary string
         VULN_SUMMARY="CRITICAL: $CRITICAL_COUNT, HIGH: $HIGH_COUNT, MEDIUM: $MEDIUM_COUNT, LOW: $LOW_COUNT"
         echo "vulnerabilities=$VULN_SUMMARY" >> $GITHUB_OUTPUT
-
         echo "report_url=$REPORT_URL" >> $GITHUB_OUTPUT
 
-        # Save the output
+        # Save the stdout
         echo "stdout<<EOF" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Process exit code and set appropriate status
-        if [ "$EXIT_CODE" -eq 4 ] || [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=warning" >> $GITHUB_OUTPUT
+        # Set GitHub outputs based on findings
+        echo "has_findings=$HAS_FINDINGS" >> $GITHUB_OUTPUT
+        echo "scan_status=$SCAN_STATUS" >> $GITHUB_OUTPUT
+
+        # Output appropriate message based on status
+        if [ "$SCAN_STATUS" = "warning" ]; then
           echo "::warning::Container scan found security issues: $VULN_SUMMARY"
-        elif [ "$EXIT_CODE" -ne 0 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=failure" >> $GITHUB_OUTPUT
+        elif [ "$SCAN_STATUS" = "failure" ]; then
           echo "::error::Container scan failed with exit code $EXIT_CODE"
         else
-          echo "has_findings=false" >> $GITHUB_OUTPUT
-          echo "scan_status=success" >> $GITHUB_OUTPUT
           echo "Container scan completed successfully with no issues found"
         fi
-      shell: bash
 
-    - name: Preserve scan results
-      run: |
-        cp "${{ github.workspace }}/results.stdout" "${{ github.workspace}}/results.json"
-        echo "Scan results preserved at ${{ github.workspace }}/results.json ($(wc -c < ${{ github.workspace}}/results.json) bytes)"
+        # Preserve scan results
+        cp "$RAW_RESULTS" "${{ github.workspace }}/results.stdout"
+        echo "Scan results preserved at ${{ github.workspace }}/results.stdout ($(wc -c < "$RAW_RESULTS") bytes)"
+        echo "Clean JSON results available at $RESULTS_JSON ($(wc -c < "$RESULTS_JSON") bytes)"
       shell: bash
 
     - name: Fetch digest of Docker image for Graph enrichment
