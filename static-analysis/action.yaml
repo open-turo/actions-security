@@ -7,7 +7,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: open-turo/action-setup-tools@v2
+    - uses: open-turo/action-setup-tools@v3
       with:
         python: 3.13.2
 
