@@ -349,6 +349,11 @@ runs:
         if [ -f "${{ github.workspace }}/results.stdout" ]; then
           echo "Scan results saved to ${{ github.workspace }}/results.stdout ($(wc -c < ${{ github.workspace}}/results.stdout) bytes)"
 
+          IMAGE_NAME="${{ steps.docker-build.outputs.image-with-tag }}"
+          if [ -z "$IMAGE_NAME" ]; then
+            IMAGE_NAME=$(grep -o "Docker image scan analysis ready.*" "${{ github.workspace }}/results.stdout" | sed -E 's/.*Docker image scan analysis ready[^0-9a-zA-Z]*([^ ]+).*/\1/')
+          fi
+
           # escape scan output for JSON
           SCAN_OUTPUT=$(cat "${{ github.workspace }}//results.clean" | jq -Rs .)
 
@@ -361,6 +366,7 @@ runs:
             "mediumCount": ${{ steps.scan.outputs.medium_count }},
             "lowCount": ${{ steps.scan.outputs.low_count }},
             "scanStatus": "${{ steps.scan.outputs.scan_status }}",
+            "imageName": "${IMAGE_NAME}"
             "reportUrl": "${{ steps.scan.outputs.report_url }}"
           }
         EOL
