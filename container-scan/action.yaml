@@ -366,7 +366,7 @@ runs:
             "mediumCount": ${{ steps.scan.outputs.medium_count }},
             "lowCount": ${{ steps.scan.outputs.low_count }},
             "scanStatus": "${{ steps.scan.outputs.scan_status }}",
-            "imageName": "${IMAGE_NAME}"
+            "imageName": "${IMAGE_NAME}",
             "reportUrl": "${{ steps.scan.outputs.report_url }}"
           }
         EOL
