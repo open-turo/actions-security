@@ -103,6 +103,15 @@ outputs:
   scan_url:
     description: URL to the scan report
     value: ${{ steps.scan.outputs.scan_url }}
+  image_id:
+    description: The Docker image ID (SHA256)
+    value: ${{ steps.docker-metadata.outputs.image_id }}
+  image_size:
+    description: The Docker image size in bytes
+    value: ${{ steps.docker-metadata.outputs.image_size }}
+  image_with_tag:
+    description: The full image name with tag
+    value: ${{ steps.docker-build.outputs.image-with-tag }}
 
 runs:
   using: composite
@@ -186,6 +195,34 @@ runs:
           MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
           ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+
+    - name: Get Docker Image metadata
+      id: docker-metadata
+      if: ${{ inputs.enable-docker-build == 'true' }}
+      run: |
+        IMAGE_WITH_TAG="${{ steps.docker-build.outputs.image-with-tag }}"
+        echo "Processing image: $IMAGE_WITH_TAG"
+        IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE_WITH_TAG" 2>/dev/null || echo "")
+        if [ -z "$IMAGE_ID" ]; then
+          echo "Warning: Could not get image ID"
+          IMAGE_ID="unknown"
+        else
+          # Remove sha256: prefix if present
+          IMAGE_ID=${IMAGE_ID#sha256:}
+          echo "Image ID: $IMAGE_ID"
+        fi
+        IMAGE_SIZE=$(docker inspect --format='{{.Size}}' "$IMAGE_WITH_TAG" 2>/dev/null || echo "0")
+        if [ "$IMAGE_SIZE" = "0" ]; then
+          echo "Warning: Could not get image size"
+        else
+          echo "Image Size: $IMAGE_SIZE bytes ($(numfmt --to=iec-i --suffix=B $IMAGE_SIZE))"
+        fi
+        echo "WIZ_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+        echo "WIZ_IMAGE_SIZE=$IMAGE_SIZE" >> $GITHUB_ENV
+        echo "WIZ_IMAGE_NAME=$IMAGE_WITH_TAG" >> $GITHUB_ENV
+        echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+        echo "image_size=$IMAGE_SIZE" >> $GITHUB_OUTPUT
+      shell: bash
 
     - name: Determine Image Name
       id: set_image_name
