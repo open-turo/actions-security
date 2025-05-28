@@ -1,0 +1,363 @@
+name: Infrastructure as Code Security Scan
+description: Scans IaC files for security misconfigurations using Wiz CLI
+
+inputs:
+  scan-path:
+    required: false
+    default: "."
+    description: Path to scan for IaC files
+  parameter-files:
+    required: false
+    description: Comma separated list of globs of external parameter files to include while scanning
+  scan-types:
+    required: false
+    description: Narrow down the scan to specific types (e.g., Terraform, CloudFormation, Kubernetes, Dockerfile, Ansible)
+  policies:
+    required: false
+    description: Scan policies to use. Can be passed multiple times to evaluate multiple policies
+  scan-name:
+    required: false
+    description: Custom name for the scan
+  enable-secrets-scan:
+    required: false
+    default: "true"
+    description: Enable secrets scanning
+  policy-hits-only:
+    required: false
+    default: "false"
+    description: Only display results that failed the applied policies
+  ignore-comments:
+    required: false
+    default: "false"
+    description: Enable ignore comments to exclude parts of code from scanning
+  discovered-resources:
+    required: false
+    default: "false"
+    description: In supported platforms (currently Terraform only), discover cloud resources and include them in the scan's JSON output
+  expand-cloudformation-intrinsics:
+    required: false
+    default: "false"
+    description: Expand intrinsic functions when processing CloudFormation templates
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for IAC service account authentication
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for IAC service account authentication
+  github-token:
+    required: false
+    description: GitHub token for repository operations
+  tags:
+    required: false
+    description: Tags to mark the scan with (KEY=VALUE format)
+  project:
+    required: false
+    description: Scan's scoped project UUID
+  timeout:
+    required: false
+    default: "1h0m0s"
+    description: Operation timeout
+  max-file-size:
+    required: false
+    default: "64MiB"
+    description: Maximum file size to scan
+
+outputs:
+  stdout:
+    description: The complete output from the Wiz CLI IAC scan
+    value: ${{ steps.scan.outputs.stdout }}
+  has_findings:
+    description: Whether the scan found any security issues
+    value: ${{ steps.scan.outputs.has_findings }}
+  scan_status:
+    description: Status of the scan (success/failure/warning)
+    value: ${{ steps.scan.outputs.scan_status }}
+  policy_violations:
+    description: Number of policy violations found
+    value: ${{ steps.scan.outputs.policy_violations }}
+  secret_findings:
+    description: Number of secret findings
+    value: ${{ steps.scan.outputs.secret_findings }}
+  misconfiguration_findings:
+    description: Number of misconfiguration findings
+    value: ${{ steps.scan.outputs.misconfiguration_findings }}
+  scan_url:
+    description: URL to the scan report in Wiz portal
+    value: ${{ steps.scan.outputs.scan_url }}
+  scanned_files:
+    description: Number of files scanned
+    value: ${{ steps.scan.outputs.scanned_files }}
+  findings_summary:
+    description: Summary of all findings
+    value: ${{ steps.scan.outputs.findings_summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Download Wiz CLI
+      run: |
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+      shell: bash
+
+    - name: Authenticate with Wiz
+      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
+      shell: bash
+
+    - name: Detect IaC Files
+      id: detect-files
+      run: |
+        echo "Scanning for IaC files in ${{ inputs.scan-path }}..."
+
+        # Find various IaC file types
+        TERRAFORM_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.tf" -o -name "*.tfvars" -o -name "*.tfplan" -o -name "*.tfplanjson" \) 2>/dev/null | wc -l)
+        CLOUDFORMATION_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) -exec grep -l "AWSTemplateFormatVersion\|Resources:" {} \; 2>/dev/null | wc -l)
+        KUBERNETES_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "apiVersion:\|kind:" {} \; 2>/dev/null | wc -l)
+        DOCKERFILE_COUNT=$(find ${{ inputs.scan-path }} -type f \( -name "Dockerfile*" -o -name "*.dockerfile" \) 2>/dev/null | wc -l)
+        ANSIBLE_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "hosts:\|tasks:\|playbook" {} \; 2>/dev/null | wc -l)
+
+        TOTAL_FILES=$((TERRAFORM_FILES + CLOUDFORMATION_FILES + KUBERNETES_FILES + DOCKERFILE_COUNT + ANSIBLE_FILES))
+
+        echo "Found IaC files:"
+        echo "  Terraform: $TERRAFORM_FILES"
+        echo "  CloudFormation: $CLOUDFORMATION_FILES"
+        echo "  Kubernetes: $KUBERNETES_FILES"
+        echo "  Dockerfile: $DOCKERFILE_COUNT"
+        echo "  Ansible: $ANSIBLE_FILES"
+        echo "  Total: $TOTAL_FILES"
+
+        echo "terraform_files=$TERRAFORM_FILES" >> $GITHUB_OUTPUT
+        echo "cloudformation_files=$CLOUDFORMATION_FILES" >> $GITHUB_OUTPUT
+        echo "kubernetes_files=$KUBERNETES_FILES" >> $GITHUB_OUTPUT
+        echo "dockerfile_files=$DOCKERFILE_COUNT" >> $GITHUB_OUTPUT
+        echo "ansible_files=$ANSIBLE_FILES" >> $GITHUB_OUTPUT
+        echo "total_files=$TOTAL_FILES" >> $GITHUB_OUTPUT
+
+        if [ "$TOTAL_FILES" -eq 0 ]; then
+          echo "::warning::No IaC files detected in the specified path"
+        fi
+      shell: bash
+
+    - name: Build Scan Command
+      id: build-command
+      run: |
+        # Start with base command
+        SCAN_CMD="wizcli iac scan --path ${{ inputs.scan-path }}"
+
+        # Add format for human-readable output
+        SCAN_CMD="$SCAN_CMD --format human"
+
+        # Add parameter files if specified
+        if [ -n "${{ inputs.parameter-files }}" ]; then
+          SCAN_CMD="$SCAN_CMD --parameter-files ${{ inputs.parameter-files }}"
+        fi
+
+        # Add scan types if specified
+        if [ -n "${{ inputs.scan-types }}" ]; then
+          SCAN_CMD="$SCAN_CMD --types ${{ inputs.scan-types }}"
+        fi
+
+        # Add policies if specified
+        if [ -n "${{ inputs.policies }}" ]; then
+          # Split policies by comma and add each one
+          IFS=',' read -ra POLICY_ARRAY <<< "${{ inputs.policies }}"
+          for policy in "${POLICY_ARRAY[@]}"; do
+            SCAN_CMD="$SCAN_CMD --policy \"$policy\""
+          done
+        fi
+
+        # Add scan name if specified
+        if [ -n "${{ inputs.scan-name }}" ]; then
+          SCAN_CMD="$SCAN_CMD --name \"${{ inputs.scan-name }}\""
+        fi
+
+        # Add secrets scanning option
+        if [ "${{ inputs.enable-secrets-scan }}" == "false" ]; then
+          SCAN_CMD="$SCAN_CMD --secrets=false"
+        fi
+
+        # Add policy hits only if specified
+        if [ "${{ inputs.policy-hits-only }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --policy-hits-only"
+        fi
+
+        # Add ignore comments if specified
+        if [ "${{ inputs.ignore-comments }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --ignore-comments"
+        fi
+
+        # Add discovered resources if specified
+        if [ "${{ inputs.discovered-resources }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --discovered-resources"
+        fi
+
+        # Add CloudFormation intrinsics expansion if specified
+        if [ "${{ inputs.expand-cloudformation-intrinsics }}" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --expand-cloudformation-intrinsics"
+        fi
+
+        # Add tags if specified
+        if [ -n "${{ inputs.tags }}" ]; then
+          IFS=',' read -ra TAG_ARRAY <<< "${{ inputs.tags }}"
+          for tag in "${TAG_ARRAY[@]}"; do
+            SCAN_CMD="$SCAN_CMD --tag \"$tag\""
+          done
+        fi
+
+        # Add project if specified
+        if [ -n "${{ inputs.project }}" ]; then
+          SCAN_CMD="$SCAN_CMD --project ${{ inputs.project }}"
+        fi
+
+        # Add timeout
+        SCAN_CMD="$SCAN_CMD --timeout ${{ inputs.timeout }}"
+
+        # Add max file size
+        SCAN_CMD="$SCAN_CMD --max-file-size ${{ inputs.max-file-size }}"
+
+        echo "scan_command=$SCAN_CMD" >> $GITHUB_OUTPUT
+        echo "Built scan command: $SCAN_CMD"
+      shell: bash
+
+    - name: Run IaC Security Scan
+      id: scan
+      run: |
+        # Define results file for human-readable output
+        RESULTS_FILE="${{ github.workspace }}/iac-results.stdout"
+
+        # Get the scan command
+        SCAN_CMD="${{ steps.build-command.outputs.scan_command }}"
+
+        # Run the scan and capture output and exit code
+        echo "Running IaC scan command: $SCAN_CMD"
+        EXIT_CODE=0
+        SCAN_OUTPUT=$(eval $SCAN_CMD 2>&1) || EXIT_CODE=$?
+        echo "IaC scan completed with exit code: $EXIT_CODE"
+
+        # Save human-readable output to results file
+        echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
+
+        # Parse the human-readable output to extract findings
+        echo "Extracting findings from scan output..."
+
+        # Clean up ANSI color codes for more reliable parsing
+        CLEAN_OUTPUT=$(echo "$SCAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
+
+        # Extract various metrics from the output
+        POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -o "Policy violations: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Secret findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Misconfiguration findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        SCANNED_FILES=$(echo "$CLEAN_OUTPUT" | grep -o "Scanned [0-9]\+ files" | grep -o "[0-9]\+" || echo "${{ steps.detect-files.outputs.total_files }}")
+
+        # Try alternative patterns if initial extraction failed
+        if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
+          echo "Trying alternative patterns for finding counts..."
+          POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -i "violations\|failed" | grep -o "[0-9]\+" | head -1 || echo "0")
+          SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
+          MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration\|issue" | grep -o "[0-9]\+" | head -1 || echo "0")
+        fi
+
+        # Ensure we have valid numbers
+        [[ -z "$POLICY_VIOLATIONS" ]] && POLICY_VIOLATIONS=0
+        [[ -z "$SECRET_FINDINGS" ]] && SECRET_FINDINGS=0
+        [[ -z "$MISCONFIGURATION_FINDINGS" ]] && MISCONFIGURATION_FINDINGS=0
+        [[ -z "$SCANNED_FILES" ]] && SCANNED_FILES=0
+
+        # Validate counts are numbers
+        [[ "$POLICY_VIOLATIONS" =~ ^[0-9]+$ ]] || POLICY_VIOLATIONS=0
+        [[ "$SECRET_FINDINGS" =~ ^[0-9]+$ ]] || SECRET_FINDINGS=0
+        [[ "$MISCONFIGURATION_FINDINGS" =~ ^[0-9]+$ ]] || MISCONFIGURATION_FINDINGS=0
+        [[ "$SCANNED_FILES" =~ ^[0-9]+$ ]] || SCANNED_FILES=0
+
+        # Extract report URL from output
+        REPORT_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+
+        echo "Extracted findings:"
+        echo "Policy violations: $POLICY_VIOLATIONS"
+        echo "Secret findings: $SECRET_FINDINGS"
+        echo "Misconfiguration findings: $MISCONFIGURATION_FINDINGS"
+        echo "Scanned files: $SCANNED_FILES"
+        echo "Report URL: $REPORT_URL"
+
+        # Export findings as outputs
+        echo "policy_violations=$POLICY_VIOLATIONS" >> $GITHUB_OUTPUT
+        echo "secret_findings=$SECRET_FINDINGS" >> $GITHUB_OUTPUT
+        echo "misconfiguration_findings=$MISCONFIGURATION_FINDINGS" >> $GITHUB_OUTPUT
+        echo "scanned_files=$SCANNED_FILES" >> $GITHUB_OUTPUT
+        echo "scan_url=$REPORT_URL" >> $GITHUB_OUTPUT
+
+        # Create a findings summary string
+        TOTAL_FINDINGS=$((POLICY_VIOLATIONS + SECRET_FINDINGS + MISCONFIGURATION_FINDINGS))
+        FINDINGS_SUMMARY="Policy Violations: $POLICY_VIOLATIONS, Secrets: $SECRET_FINDINGS, Misconfigurations: $MISCONFIGURATION_FINDINGS, Total: $TOTAL_FINDINGS"
+        echo "findings_summary=$FINDINGS_SUMMARY" >> $GITHUB_OUTPUT
+
+        # Create a cleaned version of scan results (without ANSI colors) for better processing
+        echo "$CLEAN_OUTPUT" > "${{ github.workspace }}/iac-results.clean"
+
+        # Truncate stdout if too large for GitHub actions output
+        MAX_LENGTH=1000000  # GitHub has limits on output size
+        TRUNCATED_OUTPUT="${SCAN_OUTPUT:0:$MAX_LENGTH}"
+        if [ ${#SCAN_OUTPUT} -gt $MAX_LENGTH ]; then
+          TRUNCATED_OUTPUT="${TRUNCATED_OUTPUT}... (output truncated, see iac-results.stdout for full output)"
+        fi
+        echo "stdout<<EOF" >> $GITHUB_OUTPUT
+        echo "$TRUNCATED_OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Process exit code and set appropriate status
+        if [ "$EXIT_CODE" -eq 4 ] || [ "$TOTAL_FINDINGS" -gt 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=warning" >> $GITHUB_OUTPUT
+          echo "::warning::IaC scan found security issues: $FINDINGS_SUMMARY"
+        elif [ "$EXIT_CODE" -ne 0 ]; then
+          echo "has_findings=true" >> $GITHUB_OUTPUT
+          echo "scan_status=failure" >> $GITHUB_OUTPUT
+          echo "::error::IaC scan failed with exit code $EXIT_CODE"
+        else
+          echo "has_findings=false" >> $GITHUB_OUTPUT
+          echo "scan_status=success" >> $GITHUB_OUTPUT
+          echo "IaC scan completed successfully with no issues found"
+        fi
+      shell: bash
+
+    - name: Process scan results for reporting
+      run: |
+        # Check if we have a results file
+        if [ -f "${{ github.workspace }}/iac-results.stdout" ]; then
+          echo "IaC scan results saved to ${{ github.workspace }}/iac-results.stdout ($(wc -c < ${{ github.workspace}}/iac-results.stdout) bytes)"
+
+          # Escape scan output for JSON
+          SCAN_OUTPUT=$(cat "${{ github.workspace }}/iac-results.clean" | jq -Rs .)
+
+          # Create a JSON file with the scan details for the HTML report
+          cat > "${{ github.workspace }}/iac-results.json" << EOL
+          {
+            "scanOutput": ${SCAN_OUTPUT},
+            "policyViolations": ${{ steps.scan.outputs.policy_violations }},
+            "secretFindings": ${{ steps.scan.outputs.secret_findings }},
+            "misconfigurationFindings": ${{ steps.scan.outputs.misconfiguration_findings }},
+            "scannedFiles": ${{ steps.scan.outputs.scanned_files }},
+            "scanStatus": "${{ steps.scan.outputs.scan_status }}",
+            "scanPath": "${{ inputs.scan-path }}",
+            "reportUrl": "${{ steps.scan.outputs.scan_url }}",
+            "terraformFiles": ${{ steps.detect-files.outputs.terraform_files }},
+            "cloudformationFiles": ${{ steps.detect-files.outputs.cloudformation_files }},
+            "kubernetesFiles": ${{ steps.detect-files.outputs.kubernetes_files }},
+            "dockerfileFiles": ${{ steps.detect-files.outputs.dockerfile_files }},
+            "ansibleFiles": ${{ steps.detect-files.outputs.ansible_files }}
+          }
+        EOL
+          echo "Created JSON data file for HTML report"
+        else
+          echo "::error::No IaC scan results file found at ${{ github.workspace }}/iac-results.stdout"
+          touch "${{ github.workspace}}/iac-results.stdout"
+          echo "{}" > "${{ github.workspace}}/iac-results.json"
+        fi
+      shell: bash
