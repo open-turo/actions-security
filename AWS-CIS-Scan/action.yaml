@@ -1,0 +1,323 @@
+name: Wiz IaC Security Scan
+description: Scans IaC files for security misconfigurations using Wiz CLI with CIS Benchmark Enforcement
+
+inputs:
+  scan-path:
+    required: false
+    default: "."
+    description: Path to scan for IaC files
+
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+
+  policy:
+    required: false
+    default: "CIS Benchmark Enforcement"
+    description: Wiz policy to use for scanning
+
+  scan-types:
+    required: false
+    description: Narrow scan to specific IaC types (Terraform, CloudFormation, Kubernetes, Dockerfile, Ansible)
+
+  enable-secrets-scan:
+    required: false
+    default: "true"
+    description: Enable secrets scanning
+
+  policy-hits-only:
+    required: false
+    default: "false"
+    description: Only show findings that violate the policy
+
+  output-format:
+    required: false
+    default: "human"
+    description: Output format (human, json, sarif)
+
+  fail-on-findings:
+    required: false
+    default: "false"
+    description: Fail the action if security issues are found
+
+  tags:
+    required: false
+    description: Tags to mark the scan with (KEY=VALUE format, comma-separated)
+
+  timeout:
+    required: false
+    default: "10m"
+    description: Scan timeout duration
+
+outputs:
+  scan-passed:
+    description: Whether the scan passed the policy check
+    value: ${{ steps.scan.outputs.scan-passed }}
+
+  critical-count:
+    description: Number of critical severity findings
+    value: ${{ steps.scan.outputs.critical-count }}
+
+  high-count:
+    description: Number of high severity findings
+    value: ${{ steps.scan.outputs.high-count }}
+
+  medium-count:
+    description: Number of medium severity findings
+    value: ${{ steps.scan.outputs.medium-count }}
+
+  low-count:
+    description: Number of low severity findings
+    value: ${{ steps.scan.outputs.low-count }}
+
+  total-findings:
+    description: Total number of findings
+    value: ${{ steps.scan.outputs.total-findings }}
+
+  scan-url:
+    description: URL to the scan report in Wiz portal
+    value: ${{ steps.scan.outputs.scan-url }}
+
+  summary:
+    description: Human-readable summary of findings
+    value: ${{ steps.scan.outputs.summary }}
+
+  top-issues:
+    description: Top critical and high issues with details
+    value: ${{ steps.scan.outputs.top-issues }}
+
+  resource-summary:
+    description: Summary of affected resources by type
+    value: ${{ steps.scan.outputs.resource-summary }}
+
+  affected-files-count:
+    description: Number of files with findings
+    value: ${{ steps.scan.outputs.affected-files-count }}
+
+  json-results:
+    description: Raw JSON results for detailed parsing
+    value: ${{ steps.scan.outputs.json-results }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Wiz CLI
+      shell: bash
+      run: |
+        echo "::group::Download and install Wiz CLI"
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+        echo "::endgroup::"
+
+        echo "::group::Authenticate with Wiz"
+        wizcli auth --id "${{ inputs.wiz-client-id }}" --secret "${{ inputs.wiz-client-secret }}"
+        echo "::endgroup::"
+
+    - name: Run IaC Security Scan
+      id: scan
+      shell: bash
+      run: |
+        echo "::group::Running Wiz IaC scan"
+
+        # Run scan with JSON output for detailed parsing
+        JSON_CMD="wizcli iac scan"
+        JSON_CMD="$JSON_CMD --path '${{ inputs.scan-path }}'"
+        JSON_CMD="$JSON_CMD --policy '${{ inputs.policy }}'"
+        JSON_CMD="$JSON_CMD --format json"
+        JSON_CMD="$JSON_CMD --timeout '${{ inputs.timeout }}'"
+
+        # Add optional parameters
+        [[ "${{ inputs.scan-types }}" ]] && JSON_CMD="$JSON_CMD --types '${{ inputs.scan-types }}'"
+        [[ "${{ inputs.enable-secrets-scan }}" == "false" ]] && JSON_CMD="$JSON_CMD --secrets=false"
+        [[ "${{ inputs.policy-hits-only }}" == "true" ]] && JSON_CMD="$JSON_CMD --policy-hits-only"
+
+        # Add tags if provided
+        if [[ -n "${{ inputs.tags }}" ]]; then
+          IFS=',' read -ra TAGS <<< "${{ inputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            JSON_CMD="$JSON_CMD --tag '$tag'"
+          done
+        fi
+
+        echo "Executing JSON scan: $JSON_CMD"
+        JSON_OUTPUT=$(eval $JSON_CMD 2>&1) || SCAN_EXIT_CODE=$?
+        SCAN_EXIT_CODE=${SCAN_EXIT_CODE:-0}
+
+        # Extract only the JSON part (last line that starts with {)
+        JSON_OUTPUT=$(echo "$JSON_OUTPUT" | grep '^{' | tail -1)
+        echo "$JSON_OUTPUT" > scan-results.json
+        echo "Saved JSON results to scan-results.json for detailed parsing"
+
+        # Also run human format for display
+        HUMAN_CMD="${JSON_CMD/--format json/--format human}"
+        echo "Executing human format scan..."
+        HUMAN_OUTPUT=$(eval $HUMAN_CMD 2>&1) || true
+
+        echo "Human-readable output:"
+        echo "$HUMAN_OUTPUT"
+        echo "::endgroup::"
+
+        echo "::group::Parse scan results"
+
+        # Parse counts from human output (more reliable)
+        CLEAN_OUTPUT=$(echo "$HUMAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
+
+        # Extract counts using various patterns for robustness
+        CRITICAL=$(echo "$CLEAN_OUTPUT" | grep -oP "CRITICAL:\s*\K\d+" | head -1 || echo "0")
+        HIGH=$(echo "$CLEAN_OUTPUT" | grep -oP "HIGH:\s*\K\d+" | head -1 || echo "0")
+        MEDIUM=$(echo "$CLEAN_OUTPUT" | grep -oP "MEDIUM:\s*\K\d+" | head -1 || echo "0")
+        LOW=$(echo "$CLEAN_OUTPUT" | grep -oP "LOW:\s*\K\d+" | head -1 || echo "0")
+
+        # Ensure we have valid numbers
+        CRITICAL=${CRITICAL:-0}
+        HIGH=${HIGH:-0}
+        MEDIUM=${MEDIUM:-0}
+        LOW=${LOW:-0}
+
+        TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
+
+        echo "Parsed counts - Critical: $CRITICAL, High: $HIGH, Medium: $MEDIUM, Low: $LOW, Total: $TOTAL"
+
+        # Extract scan URL
+        SCAN_URL=$(echo "$HUMAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+
+        # Try to extract detailed information from JSON if valid
+        TOP_ISSUES=""
+        RESOURCE_SUMMARY=""
+        AFFECTED_FILES_COUNT="0"
+
+        if [[ -f scan-results.json ]] && jq empty scan-results.json 2>/dev/null; then
+          echo "Parsing JSON results for details..."
+
+          # Parse the Wiz JSON structure
+          TOP_ISSUES=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[] |
+               select(.severity == "CRITICAL" or .severity == "HIGH") |
+               .matches[] |
+               "• **[\(.severity // "HIGH")]** \(.resourceName) in <code>\(.fileName):\(.lineNumber)</code>"
+              ] |
+              .[0:10] |
+              join("\n")
+            else
+              ""
+            end
+          ' scan-results.json 2>/dev/null || echo "")
+
+          AFFECTED_FILES_COUNT=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[].matches[].fileName] | unique | length
+            else
+              0
+            end
+          ' scan-results.json 2>/dev/null || echo "0")
+
+          RESOURCE_SUMMARY=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[].matches[] |
+               {resourceType: (.resourceName | split("[")[0])}
+              ] |
+              group_by(.resourceType) |
+              map("• **\(.[0].resourceType)**: \(length) issue(s)") |
+              .[0:5] |
+              join("\n")
+            else
+              ""
+            end
+          ' scan-results.json 2>/dev/null || echo "")
+        else
+          echo "Could not parse JSON output for detailed information"
+        fi
+
+        # Create summary with emoji indicators
+        if [[ $SCAN_EXIT_CODE -eq 0 && $TOTAL -eq 0 ]]; then
+          SCAN_PASSED="true"
+          SUMMARY="✅ **Scan Status:** Passed - No findings detected"
+        else
+          SCAN_PASSED="false"
+          if [[ $CRITICAL -gt 0 ]]; then
+            SUMMARY="🔴 **Scan Status:** Critical issues found - $TOTAL total ($CRITICAL critical, $HIGH high, $MEDIUM medium, $LOW low)"
+          elif [[ $HIGH -gt 0 ]]; then
+            SUMMARY="🟠 **Scan Status:** High severity issues found - $TOTAL total ($HIGH high, $MEDIUM medium, $LOW low)"
+          elif [[ $MEDIUM -gt 0 ]]; then
+            SUMMARY="🟡 **Scan Status:** Medium severity issues found - $TOTAL total ($MEDIUM medium, $LOW low)"
+          else
+            SUMMARY="🔵 **Scan Status:** Low severity issues found - $TOTAL total ($LOW low)"
+          fi
+        fi
+
+        # Set outputs with hyphens (matching the output declarations)
+        echo "scan-passed=$SCAN_PASSED" >> $GITHUB_OUTPUT
+        echo "critical-count=$CRITICAL" >> $GITHUB_OUTPUT
+        echo "high-count=$HIGH" >> $GITHUB_OUTPUT
+        echo "medium-count=$MEDIUM" >> $GITHUB_OUTPUT
+        echo "low-count=$LOW" >> $GITHUB_OUTPUT
+        echo "total-findings=$TOTAL" >> $GITHUB_OUTPUT
+        echo "scan-url=$SCAN_URL" >> $GITHUB_OUTPUT
+        echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+        echo "affected-files-count=$AFFECTED_FILES_COUNT" >> $GITHUB_OUTPUT
+
+        # Multi-line outputs
+        {
+          echo "top-issues<<EOF"
+          echo "$TOP_ISSUES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        {
+          echo "resource-summary<<EOF"
+          echo "$RESOURCE_SUMMARY"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        # Output the JSON results for the reusable workflow to parse
+        if [[ -f scan-results.json ]]; then
+          {
+            echo "json-results<<EOF"
+            cat scan-results.json
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          echo "JSON results exported as output for detailed parsing"
+        fi
+
+        echo "::endgroup::"
+
+        # Create GitHub annotations
+        if [[ $TOTAL -gt 0 ]]; then
+          if [[ $CRITICAL -gt 0 ]]; then
+            echo "::error::IaC scan found $CRITICAL critical security issues"
+          elif [[ $HIGH -gt 0 ]]; then
+            echo "::warning::IaC scan found $HIGH high severity issues"
+          else
+            echo "::notice::IaC scan found $TOTAL issues"
+          fi
+
+          [[ -n "$SCAN_URL" ]] && echo "::notice::View detailed report: $SCAN_URL"
+        else
+          echo "::notice::IaC scan passed with no findings"
+        fi
+
+        # Only fail if fail-on-findings is true AND there are critical/high issues
+        if [[ "${{ inputs.fail-on-findings }}" == "true" && ($CRITICAL -gt 0 || $HIGH -gt 0) ]]; then
+          echo "::error::Failing build due to critical/high security findings"
+          exit 1
+        fi
+
+    - name: Upload Scan Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: wiz-iac-scan-results
+        path: |
+          ${{ github.workspace }}/scan-results.json
+          ${{ github.workspace }}/*.sarif
+        retention-days: 30
+        if-no-files-found: ignore
