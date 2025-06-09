@@ -145,87 +145,6 @@ runs:
         fi
       shell: bash
 
-    - name: Build Scan Command
-      id: build-command
-      run: |
-        # Start with base command
-        SCAN_CMD="wizcli iac scan --path ${{ inputs.scan-path }}"
-
-        # Add format for human-readable output
-        SCAN_CMD="$SCAN_CMD --format human"
-
-        # Add parameter files if specified
-        if [ -n "${{ inputs.parameter-files }}" ]; then
-          SCAN_CMD="$SCAN_CMD --parameter-files ${{ inputs.parameter-files }}"
-        fi
-
-        # Add scan types if specified
-        if [ -n "${{ inputs.scan-types }}" ]; then
-          SCAN_CMD="$SCAN_CMD --types ${{ inputs.scan-types }}"
-        fi
-
-        # Add policies if specified
-        if [ -n "${{ inputs.policies }}" ]; then
-          # Split policies by comma and add each one
-          IFS=',' read -ra POLICY_ARRAY <<< "${{ inputs.policies }}"
-          for policy in "${POLICY_ARRAY[@]}"; do
-            SCAN_CMD="$SCAN_CMD --policy \"$policy\""
-          done
-        fi
-
-        # Add scan name if specified
-        if [ -n "${{ inputs.scan-name }}" ]; then
-          SCAN_CMD="$SCAN_CMD --name \"${{ inputs.scan-name }}\""
-        fi
-
-        # Add secrets scanning option
-        if [ "${{ inputs.enable-secrets-scan }}" == "false" ]; then
-          SCAN_CMD="$SCAN_CMD --secrets=false"
-        fi
-
-        # Add policy hits only if specified
-        if [ "${{ inputs.policy-hits-only }}" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --policy-hits-only"
-        fi
-
-        # Add ignore comments if specified
-        if [ "${{ inputs.ignore-comments }}" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --ignore-comments"
-        fi
-
-        # Add discovered resources if specified
-        if [ "${{ inputs.discovered-resources }}" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --discovered-resources"
-        fi
-
-        # Add CloudFormation intrinsics expansion if specified
-        if [ "${{ inputs.expand-cloudformation-intrinsics }}" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --expand-cloudformation-intrinsics"
-        fi
-
-        # Add tags if specified
-        if [ -n "${{ inputs.tags }}" ]; then
-          IFS=',' read -ra TAG_ARRAY <<< "${{ inputs.tags }}"
-          for tag in "${TAG_ARRAY[@]}"; do
-            SCAN_CMD="$SCAN_CMD --tag \"$tag\""
-          done
-        fi
-
-        # Add project if specified
-        if [ -n "${{ inputs.project }}" ]; then
-          SCAN_CMD="$SCAN_CMD --project ${{ inputs.project }}"
-        fi
-
-        # Add timeout
-        SCAN_CMD="$SCAN_CMD --timeout ${{ inputs.timeout }}"
-
-        # Add max file size
-        SCAN_CMD="$SCAN_CMD --max-file-size ${{ inputs.max-file-size }}"
-
-        echo "scan_command=$SCAN_CMD" >> $GITHUB_OUTPUT
-        echo "Built scan command: $SCAN_CMD"
-      shell: bash
-
     - name: Run IaC Security Scan
       id: scan
       run: |
@@ -233,12 +152,83 @@ runs:
         RESULTS_FILE="${{ github.workspace }}/iac-results.stdout"
 
         # Get the scan command
-        SCAN_CMD="${{ steps.build-command.outputs.scan_command }}"
+        SCAN_ARGS=(
+          "iac" "scan"
+          "--path" "${{ inputs.scan-path }}"
+          "--format" "human"
+        )
+
+        # Add parameter files if specified
+        if [ -n "${{ inputs.parameter-files }}" ]; then
+          SCAN_ARGS+=("--parameter-files" "${{ inputs.parameter-files }}")
+        fi
+
+        # Add scan types if specified
+        if [ -n "${{ inputs.scan-types }}" ]; then
+          SCAN_ARGS+=("--types" "${{ inputs.scan-types }}")
+        fi
+
+        # Add policies if specified
+        if [ -n "${{ inputs.policies }}" ]; then
+          IFS=',' read -ra POLICY_ARRAY <<< "${{ inputs.policies }}"
+          for policy in "${POLICY_ARRAY[@]}"; do
+            SCAN_ARGS+=("--policy" "$policy")
+          done
+        fi
+
+        # Add scan name if specified
+        if [ -n "${{ inputs.scan-name }}" ]; then
+          SCAN_ARGS+=("--name" "${{ inputs.scan-name }}")
+        fi
+
+        # Add secrets scanning option
+        if [ "${{ inputs.enable-secrets-scan }}" == "false" ]; then
+          SCAN_ARGS+=("--secrets=false")
+        fi
+
+        # Add policy hits only if specified
+        if [ "${{ inputs.policy-hits-only }}" == "true" ]; then
+          SCAN_ARGS+=("--policy-hits-only")
+        fi
+
+        # Add ignore comments if specified
+        if [ "${{ inputs.ignore-comments }}" == "true" ]; then
+          SCAN_ARGS+=("--ignore-comments")
+        fi
+
+        # Add discovered resources if specified
+        if [ "${{ inputs.discovered-resources }}" == "true" ]; then
+          SCAN_ARGS+=("--discovered-resources")
+        fi
+
+        # Add CloudFormation intrinsics expansion if specified
+        if [ "${{ inputs.expand-cloudformation-intrinsics }}" == "true" ]; then
+          SCAN_ARGS+=("--expand-cloudformation-intrinsics")
+        fi
+
+        # Add tags if specified
+        if [ -n "${{ inputs.tags }}" ]; then
+          IFS=',' read -ra TAG_ARRAY <<< "${{ inputs.tags }}"
+          for tag in "${TAG_ARRAY[@]}"; do
+            SCAN_ARGS+=("--tag" "$tag")
+          done
+        fi
+
+        # Add project if specified
+        if [ -n "${{ inputs.project }}" ]; then
+          SCAN_ARGS+=("--project" "${{ inputs.project }}")
+        fi
+
+        # Add timeout
+        SCAN_ARGS+=("--timeout" "${{ inputs.timeout }}")
+
+        # Add max file size
+        SCAN_ARGS+=("--max-file-size" "${{ inputs.max-file-size }}")
 
         # Run the scan and capture output and exit code
-        echo "Running IaC scan command: $SCAN_CMD"
+        echo "Running IaC scan with arguments: ${SCAN_ARGS[*]}"
         EXIT_CODE=0
-        SCAN_OUTPUT=$(eval $SCAN_CMD 2>&1) || EXIT_CODE=$?
+        SCAN_OUTPUT=$(wizcli "${SCAN_ARGS[@]}" 2>&1) || EXIT_CODE=$?
         echo "IaC scan completed with exit code: $EXIT_CODE"
 
         # Save human-readable output to results file
