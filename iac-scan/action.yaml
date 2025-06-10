@@ -90,6 +90,27 @@ outputs:
   findings_summary:
     description: Summary of all findings
     value: ${{ steps.scan.outputs.findings_summary }}
+  critical_count:
+    description: Number of critical severity findings
+    value: ${{ steps.scan.outputs.critical_count }}
+  high_count:
+    description: Number of high severity findings
+    value: ${{ steps.scan.outputs.high_count }}
+  medium_count:
+    description: Number of medium severity findings
+    value: ${{ steps.scan.outputs.medium_count }}
+  low_count:
+    description: Number of low severity findings
+    value: ${{ steps.scan.outputs.low_count }}
+  info_count:
+    description: Number of informational severity findings
+    value: ${{ steps.scan.outputs.info_count }}
+  total_failed_rules:
+    description: Total number of failed rules
+    value: ${{ steps.scan.outputs.total_failed_rules }}
+  severity_summary:
+    description: Summary of findings by severity
+    value: ${{ steps.scan.outputs.severity_summary }}
 
 runs:
   using: composite
@@ -240,36 +261,82 @@ runs:
         # Clean up ANSI color codes for more reliable parsing
         CLEAN_OUTPUT=$(echo "$SCAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
 
-        # Extract various metrics from the output
-        POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -o "Policy violations: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Secret findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Misconfiguration findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        SCANNED_FILES=$(echo "$CLEAN_OUTPUT" | grep -o "Scanned [0-9]\+ files" | grep -o "[0-9]\+" || echo "${{ steps.detect-files.outputs.total_files }}")
+        # Extract various metrics from the actual Wiz CLI output format
+        # Look for "Failed rules: CRITICAL: X, HIGH: Y, MEDIUM: Z, LOW: W, INFORMATIONAL: V"
+        CRITICAL_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "CRITICAL: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        HIGH_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "HIGH: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        MEDIUM_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "MEDIUM: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        LOW_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "LOW: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+        INFO_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "INFORMATIONAL: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
 
-        # Try alternative patterns if initial extraction failed
-        if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
-          echo "Trying alternative patterns for finding counts..."
-          POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -i "violations\|failed" | grep -o "[0-9]\+" | head -1 || echo "0")
-          SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
-          MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration\|issue" | grep -o "[0-9]\+" | head -1 || echo "0")
-        fi
+        # Extract total failed rules
+        TOTAL_FAILED_RULES=$(echo "$CLEAN_OUTPUT" | grep -o "Total failed rules: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+
+        # Extract files scanned count
+        SCANNED_FILES=$(echo "$CLEAN_OUTPUT" | grep -o "Files scanned: [0-9]\+" | grep -o "[0-9]\+" || echo "${{ steps.detect-files.outputs.total_files }}")
 
         # Ensure we have valid numbers
-        [[ -z "$POLICY_VIOLATIONS" ]] && POLICY_VIOLATIONS=0
-        [[ -z "$SECRET_FINDINGS" ]] && SECRET_FINDINGS=0
-        [[ -z "$MISCONFIGURATION_FINDINGS" ]] && MISCONFIGURATION_FINDINGS=0
+        [[ -z "$CRITICAL_COUNT" ]] && CRITICAL_COUNT=0
+        [[ -z "$HIGH_COUNT" ]] && HIGH_COUNT=0
+        [[ -z "$MEDIUM_COUNT" ]] && MEDIUM_COUNT=0
+        [[ -z "$LOW_COUNT" ]] && LOW_COUNT=0
+        [[ -z "$INFO_COUNT" ]] && INFO_COUNT=0
+        [[ -z "$TOTAL_FAILED_RULES" ]] && TOTAL_FAILED_RULES=0
         [[ -z "$SCANNED_FILES" ]] && SCANNED_FILES=0
 
         # Validate counts are numbers
-        [[ "$POLICY_VIOLATIONS" =~ ^[0-9]+$ ]] || POLICY_VIOLATIONS=0
-        [[ "$SECRET_FINDINGS" =~ ^[0-9]+$ ]] || SECRET_FINDINGS=0
-        [[ "$MISCONFIGURATION_FINDINGS" =~ ^[0-9]+$ ]] || MISCONFIGURATION_FINDINGS=0
+        [[ "$CRITICAL_COUNT" =~ ^[0-9]+$ ]] || CRITICAL_COUNT=0
+        [[ "$HIGH_COUNT" =~ ^[0-9]+$ ]] || HIGH_COUNT=0
+        [[ "$MEDIUM_COUNT" =~ ^[0-9]+$ ]] || MEDIUM_COUNT=0
+        [[ "$LOW_COUNT" =~ ^[0-9]+$ ]] || LOW_COUNT=0
+        [[ "$INFO_COUNT" =~ ^[0-9]+$ ]] || INFO_COUNT=0
+        [[ "$TOTAL_FAILED_RULES" =~ ^[0-9]+$ ]] || TOTAL_FAILED_RULES=0
         [[ "$SCANNED_FILES" =~ ^[0-9]+$ ]] || SCANNED_FILES=0
+
+        # Calculate total from individual counts if total failed rules is 0 or missing
+        CALCULATED_TOTAL=$((CRITICAL_COUNT + HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT + INFO_COUNT))
+        if [ "$TOTAL_FAILED_RULES" -eq 0 ] && [ "$CALCULATED_TOTAL" -gt 0 ]; then
+          TOTAL_FAILED_RULES=$CALCULATED_TOTAL
+        fi
+
+        # Map to the expected output format for backward compatibility
+        # For IaC scans, all failed rules are considered policy violations since they're rule-based
+        POLICY_VIOLATIONS=$TOTAL_FAILED_RULES
+
+        # Look for specific secret findings in the output (separate from rule failures)
+        SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
+        [[ "$SECRET_FINDINGS" =~ ^[0-9]+$ ]] || SECRET_FINDINGS=0
+
+        # For IaC scans, misconfigurations are typically captured as rule failures
+        # Only count separate misconfigurations if explicitly mentioned
+        MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration" | grep -o "[0-9]\+" | head -1 || echo "0")
+        [[ "$MISCONFIGURATION_FINDINGS" =~ ^[0-9]+$ ]] || MISCONFIGURATION_FINDINGS=0
+
+        # Fallback parsing for older output formats
+        if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
+          echo "Trying fallback patterns for finding counts..."
+          POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -o "Policy violations: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+          SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Secret findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+          MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Misconfiguration findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+
+          # Final fallback - try to extract any numbers from relevant lines
+          if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
+            POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -i "violations\|failed" | grep -o "[0-9]\+" | head -1 || echo "0")
+            SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
+            MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration\|issue" | grep -o "[0-9]\+" | head -1 || echo "0")
+          fi
+        fi
 
         # Extract report URL from output
         REPORT_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
 
         echo "Extracted findings:"
+        echo "Critical: $CRITICAL_COUNT"
+        echo "High: $HIGH_COUNT"
+        echo "Medium: $MEDIUM_COUNT"
+        echo "Low: $LOW_COUNT"
+        echo "Informational: $INFO_COUNT"
+        echo "Total failed rules: $TOTAL_FAILED_RULES"
         echo "Policy violations: $POLICY_VIOLATIONS"
         echo "Secret findings: $SECRET_FINDINGS"
         echo "Misconfiguration findings: $MISCONFIGURATION_FINDINGS"
@@ -283,10 +350,20 @@ runs:
         echo "scanned_files=$SCANNED_FILES" >> $GITHUB_OUTPUT
         echo "scan_url=$REPORT_URL" >> $GITHUB_OUTPUT
 
+        # Export severity breakdown for enhanced reporting
+        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+        echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+        echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+        echo "info_count=$INFO_COUNT" >> $GITHUB_OUTPUT
+        echo "total_failed_rules=$TOTAL_FAILED_RULES" >> $GITHUB_OUTPUT
+
         # Create a findings summary string
         TOTAL_FINDINGS=$((POLICY_VIOLATIONS + SECRET_FINDINGS + MISCONFIGURATION_FINDINGS))
         FINDINGS_SUMMARY="Policy Violations: $POLICY_VIOLATIONS, Secrets: $SECRET_FINDINGS, Misconfigurations: $MISCONFIGURATION_FINDINGS, Total: $TOTAL_FINDINGS"
+        SEVERITY_SUMMARY="Critical: $CRITICAL_COUNT, High: $HIGH_COUNT, Medium: $MEDIUM_COUNT, Low: $LOW_COUNT, Info: $INFO_COUNT"
         echo "findings_summary=$FINDINGS_SUMMARY" >> $GITHUB_OUTPUT
+        echo "severity_summary=$SEVERITY_SUMMARY" >> $GITHUB_OUTPUT
 
         # Create a cleaned version of scan results (without ANSI colors) for better processing
         echo "$CLEAN_OUTPUT" > "${{ github.workspace }}/iac-results.clean"
@@ -341,7 +418,14 @@ runs:
             "cloudformationFiles": ${{ steps.detect-files.outputs.cloudformation_files }},
             "kubernetesFiles": ${{ steps.detect-files.outputs.kubernetes_files }},
             "dockerfileFiles": ${{ steps.detect-files.outputs.dockerfile_files }},
-            "ansibleFiles": ${{ steps.detect-files.outputs.ansible_files }}
+            "ansibleFiles": ${{ steps.detect-files.outputs.ansible_files }},
+            "criticalCount": ${{ steps.scan.outputs.critical_count }},
+            "highCount": ${{ steps.scan.outputs.high_count }},
+            "mediumCount": ${{ steps.scan.outputs.medium_count }},
+            "lowCount": ${{ steps.scan.outputs.low_count }},
+            "infoCount": ${{ steps.scan.outputs.info_count }},
+            "totalFailedRules": ${{ steps.scan.outputs.total_failed_rules }},
+            "severitySummary": "${{ steps.scan.outputs.severity_summary }}"
           }
         EOL
           echo "Created JSON data file for HTML report"
