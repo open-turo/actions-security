@@ -47,15 +47,6 @@ inputs:
   dockerhub-password:
     required: true
     description: DockerHub password
-  MAX_MIND_USER:
-    required: false
-    description: MaxMind User ID
-  MAX_MIND_LICENSE_KEY:
-    required: false
-    description: MaxMind License Key
-  vfunction-file:
-    required: false
-    description: Vfunction file name
   target:
     required: false
     description: Target build stage for multi-stage Docker builds
@@ -74,6 +65,21 @@ inputs:
   aws-secret-access-key:
     required: false
     description: AWS Secret Access Key
+  s3-bucket-name:
+    required: false
+    description: S3 bucket name for caching Wiz CLI binary
+  s3-bucket-region:
+    required: false
+    description: S3 bucket region for caching
+    default: us-east-1
+  wiz-cli-version:
+    required: false
+    description: Specific Wiz CLI version to download (defaults to latest)
+    default: latest
+  container-setup-env:
+    required: false
+    description: Environment variables for container setup as key-value pairs (e.g., AWS_ACCESS_KEY_ID=value,ARTIFACTORY_USERNAME=value)
+    default: ""
 
 outputs:
   stdout:
@@ -112,6 +118,9 @@ outputs:
   image_with_tag:
     description: The full image name with tag
     value: ${{ steps.docker-build.outputs.image-with-tag }}
+  cache-hit:
+    description: Whether the Wiz CLI cache was hit
+    value: ${{ steps.wiz-cli-cache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -119,12 +128,50 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Download Wiz CLI
+    - name: Compute Wiz CLI cache key
+      if: inputs.s3-bucket-name != ''
+      id: wiz_cli_cache_key
       run: |
-        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        VERSION="${{ inputs.wiz-cli-version }}"
+        echo "key=wiz-cli-$VERSION-$(uname -s)-$(uname -m)" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Load cached Wiz CLI if available
+      if: inputs.s3-bucket-name != ''
+      uses: everpcpc/actions-cache@v2
+      id: wiz-cli-cache
+      with:
+        bucket: ${{ inputs.s3-bucket-name }}
+        use-fallback: false
+        path: /usr/local/bin/wizcli
+        key: ${{ steps.wiz_cli_cache_key.outputs.key }}
+        restore-keys: wiz-cli-
+      env:
+        AWS_REGION: ${{ inputs.s3-bucket-region }}
+
+    - name: Download Wiz CLI
+      if: inputs.s3-bucket-name == '' || steps.wiz-cli-cache.outputs.cache-hit != 'true'
+      run: |
+        VERSION="${{ inputs.wiz-cli-version }}"
+        if [ "$VERSION" = "latest" ]; then
+          URL="https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64"
+        else
+          URL="https://downloads.wiz.io/wizcli/$VERSION/wizcli-linux-amd64"
+        fi
+        curl -o wizcli "$URL"
         chmod +x wizcli
         sudo mv wizcli /usr/local/bin/
       shell: bash
+
+    - name: Save Wiz CLI to cache
+      if: inputs.s3-bucket-name != '' && steps.wiz-cli-cache.outputs.cache-hit != 'true'
+      uses: everpcpc/actions-cache@v2
+      with:
+        bucket: ${{ inputs.s3-bucket-name }}
+        path: /usr/local/bin/wizcli
+        key: ${{ steps.wiz_cli_cache_key.outputs.key }}
+      env:
+        AWS_REGION: ${{ inputs.s3-bucket-region }}
 
     - name: Authenticate with Wiz
       run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
@@ -134,25 +181,28 @@ runs:
       shell: bash
 
     - name: Setup Tools
-      uses: open-turo/action-setup-tools@v2
+      uses: open-turo/action-setup-tools@v3
 
     - name: Run Container Setup Commands
       if: inputs.container-setup-commands != ''
       shell: bash
       run: |
         echo "Running container setup commands after checkout"
+
+        # Parse container-setup-env input into environment variables
+        if [ -n "${{ inputs.container-setup-env }}" ]; then
+          echo "Setting up environment variables from container-setup-env input"
+          IFS=',' read -ra ENV_PAIRS <<< "${{ inputs.container-setup-env }}"
+          for pair in "${ENV_PAIRS[@]}"; do
+            if [[ $pair == *"="* ]]; then
+              export "$pair"
+              echo "Set environment variable: ${pair%%=*}"
+            fi
+          done
+        fi
+
+        # Run the container setup commands
         ${{ inputs.container-setup-commands }}
-      env:
-        # AWS Credentials
-        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
-        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
-        # Artifactory Credentials
-        ARTIFACTORY_USERNAME: ${{ inputs.artifactory-username }}
-        ARTIFACTORY_AUTH_TOKEN: ${{ inputs.artifactory-auth-token }}
-        # Other common secrets
-        MAX_MIND_LICENSE_KEY: ${{ inputs.MAX_MIND_LICENSE_KEY }}
-        DOCKER_USERNAME: ${{ inputs.dockerhub-user }}
-        DOCKER_PASSWORD: ${{ inputs.dockerhub-password }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -189,11 +239,7 @@ runs:
         image-version: ${{ inputs.image-tag }}
         target: ${{ inputs.target }}
         build-contexts: ${{ inputs.build-contexts }}
-        build-args: |
-          ARTIFACTORY_USERNAME=${{ inputs.artifactory-username }}
-          ARTIFACTORY_AUTH_TOKEN=${{ inputs.artifactory-auth-token }}
-          MAX_MIND_LICENSE_KEY=${{ inputs.MAX_MIND_LICENSE_KEY }}
-          ${{ inputs.build-args }}
+        build-args: ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
 
     - name: Get Docker Image metadata
@@ -227,7 +273,7 @@ runs:
     - name: Determine Image Name
       id: set_image_name
       run: |
-        echo "image_name=${{ steps.docker-build.outputs.image-name }}" >> $GITHUB_OUTPUT
+        echo "image_name=${{ steps.docker-build.outputs.image-with-tag }}" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Get Dockerfile Path
