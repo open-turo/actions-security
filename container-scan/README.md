@@ -97,24 +97,6 @@ Scans container images for vulnerabilities using Wiz CLI
     # Required: true
     # Default: ""
 
-    MAX_MIND_USER:
-    # MaxMind User ID
-    #
-    # Required: false
-    # Default: ""
-
-    MAX_MIND_LICENSE_KEY:
-    # MaxMind License Key
-    #
-    # Required: false
-    # Default: ""
-
-    vfunction-file:
-    # Vfunction file name
-    #
-    # Required: false
-    # Default: ""
-
     target:
     # Target build stage for multi-stage Docker builds
     #
@@ -147,6 +129,30 @@ Scans container images for vulnerabilities using Wiz CLI
 
     aws-secret-access-key:
     # AWS Secret Access Key
+    #
+    # Required: false
+    # Default: ""
+
+    s3-bucket-name:
+    # S3 bucket name for caching Wiz CLI binary
+    #
+    # Required: false
+    # Default: ""
+
+    s3-bucket-region:
+    # S3 bucket region for caching
+    #
+    # Required: false
+    # Default: us-east-1
+
+    wiz-cli-version:
+    # Specific Wiz CLI version to download (defaults to latest)
+    #
+    # Required: false
+    # Default: latest
+
+    container-setup-env:
+    # Environment variables for container setup as key-value pairs (e.g., AWS_ACCESS_KEY_ID=value,ARTIFACTORY_USERNAME=value)
     #
     # Required: false
     # Default: ""
