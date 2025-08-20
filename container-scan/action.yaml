@@ -59,12 +59,6 @@ inputs:
   container-setup-commands:
     required: false
     description: Commands to set up the container environment
-  aws-access-key-id:
-    required: false
-    description: AWS Access Key ID
-  aws-secret-access-key:
-    required: false
-    description: AWS Secret Access Key
   s3-bucket-name:
     required: false
     description: S3 bucket name for caching Wiz CLI binary
@@ -109,13 +103,13 @@ outputs:
   scan_url:
     description: URL to the scan report
     value: ${{ steps.scan.outputs.scan_url }}
-  image_id:
+  image-id:
     description: The Docker image ID (SHA256)
-    value: ${{ steps.docker-metadata.outputs.image_id }}
-  image_size:
+    value: ${{ steps.docker-metadata.outputs.image-id }}
+  image-size:
     description: The Docker image size in bytes
-    value: ${{ steps.docker-metadata.outputs.image_size }}
-  image_with_tag:
+    value: ${{ steps.docker-metadata.outputs.image-size }}
+  image-with-tag:
     description: The full image name with tag
     value: ${{ steps.docker-build.outputs.image-with-tag }}
   cache-hit:
