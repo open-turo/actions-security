@@ -121,18 +121,6 @@ Scans container images for vulnerabilities using Wiz CLI
     # Required: false
     # Default: ""
 
-    aws-access-key-id:
-    # AWS Access Key ID
-    #
-    # Required: false
-    # Default: ""
-
-    aws-secret-access-key:
-    # AWS Secret Access Key
-    #
-    # Required: false
-    # Default: ""
-
     s3-bucket-name:
     # S3 bucket name for caching Wiz CLI binary
     #
