@@ -120,7 +120,7 @@ runs:
   using: composite
   steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Compute Wiz CLI cache key
       if: inputs.s3-bucket-name != ''
