@@ -222,7 +222,7 @@ runs:
 
     - name: Build docker image
       if: ${{ inputs.enable-docker-build == 'true' }}
-      uses: open-turo/actions-security/docker-build@v3
+      uses: open-turo/actions-security/docker-build@v4
       id: docker-build
       with:
         docker-config-file: ${{ inputs.docker-config-file }}
