@@ -20,5 +20,109 @@ runs:
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+
+        # Function to check if a file matches .semgrepignore patterns
+        should_ignore_file() {
+          local file="$1"
+          local ignore_file=".semgrepignore"
+
+          if [ ! -f "$ignore_file" ]; then
+            return 1  # Don't ignore if no .semgrepignore
+          fi
+
+          while IFS= read -r pattern; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^[[:space:]]*# ]] && continue
+
+            # Remove leading/trailing whitespace
+            pattern=$(echo "$pattern" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            [[ -z "$pattern" ]] && continue
+
+            # Handle different pattern types
+            case "$pattern" in
+              */)  # Directory pattern (e.g., "k8s/")
+                if [[ "$file" == "${pattern}"* ]]; then
+                  echo "  → Ignoring $file (matches directory pattern: $pattern)"
+                  return 0
+                fi
+                ;;
+              **/*)  # Path with wildcards (e.g., "**/integration/**")
+                if [[ "$file" == $pattern ]]; then
+                  echo "  → Ignoring $file (matches path pattern: $pattern)"
+                  return 0
+                fi
+                ;;
+              *.*)  # Extension pattern (e.g., "*.schema.yaml")
+                if [[ "$file" == $pattern ]]; then
+                  echo "  → Ignoring $file (matches extension pattern: $pattern)"
+                  return 0
+                fi
+                ;;
+              *)  # Exact match or simple glob
+                if [[ "$file" == $pattern ]]; then
+                  echo "  → Ignoring $file (matches pattern: $pattern)"
+                  return 0
+                fi
+                ;;
+            esac
+          done < "$ignore_file"
+
+          return 1  # Don't ignore
+        }
+
+        # Check if this is a pull request
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          echo "🔍 Running semgrep on pull request changes..."
+
+          # Get the base commit for comparison from GitHub event
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          echo "Base SHA: $BASE_SHA"
+          echo "Head SHA: ${{ github.sha }}"
+
+          # Get all changed files
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA"..HEAD)
+          echo "📁 Changed files in this PR:"
+          echo "$CHANGED_FILES"
+
+          # Check if .semgrepignore exists
+          if [ -f ".semgrepignore" ]; then
+            echo "📋 Found .semgrepignore, filtering files..."
+            echo "Ignore patterns:"
+            grep -v '^[[:space:]]*#\|^[[:space:]]*$' .semgrepignore | sed 's/^/  - /'
+
+            # Filter files
+            FILTERED_FILES=""
+            IGNORED_COUNT=0
+            TOTAL_COUNT=0
+
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                TOTAL_COUNT=$((TOTAL_COUNT + 1))
+                if should_ignore_file "$file"; then
+                  IGNORED_COUNT=$((IGNORED_COUNT + 1))
+                elif [ -f "$file" ]; then  # Only include files that still exist
+                  FILTERED_FILES="$FILTERED_FILES $file"
+                  echo "  ✅ Will scan: $file"
+                fi
+              fi
+            done <<< "$CHANGED_FILES"
+
+            echo "📊 Filtering summary: $IGNORED_COUNT/$TOTAL_COUNT files ignored"
+
+            # Run semgrep on filtered files
+            if [ -n "$FILTERED_FILES" ]; then
+              echo "🚀 Running semgrep on $(echo $FILTERED_FILES | wc -w) files..."
+              SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep --config=auto $FILTERED_FILES
+            else
+              echo "✅ No files to scan after applying .semgrepignore filters - all files ignored!"
+              exit 0
+            fi
+          else
+            echo "⚠️  No .semgrepignore file found, running semgrep ci on all changes"
+            SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+          fi
+        else
+          echo "🔍 Not a pull request, running standard semgrep ci"
+          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+        fi
       shell: bash
