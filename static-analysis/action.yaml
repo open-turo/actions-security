@@ -7,11 +7,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: open-turo/action-setup-tools@v3
+    - uses: open-turo/action-setup-tools@v2
       with:
-        python: 3.13.2
+        python: 3.10.12
 
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 2
 
@@ -20,5 +20,5 @@ runs:
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.118.0 semgrep ci
       shell: bash
