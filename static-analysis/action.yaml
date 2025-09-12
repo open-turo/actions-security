@@ -4,6 +4,10 @@ inputs:
   semgrep-app-token:
     required: true
     description: Semgrep API token to pull the latest rule configuration from the ruleboard in Semgrep UI.
+  scan-mode:
+    required: false
+    default: "differential"
+    description: 'Scan mode: "differential" for PR scans, "full" for complete repository scans'
 runs:
   using: composite
   steps:
@@ -20,5 +24,14 @@ runs:
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
-        SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+
+        echo "🔍 Scan mode: ${{ inputs.scan-mode }}"
+
+        if [ "${{ inputs.scan-mode }}" = "full" ]; then
+          echo "🔍 Running full repository scan (typically for main branch)"
+          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep scan --config auto
+        else
+          echo "🔍 Running differential scan (typically for pull requests)"
+          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+        fi
       shell: bash

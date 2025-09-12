@@ -18,6 +18,12 @@ GitHub Action that scans code changes being made and posts security findings as 
     #
     # Required: true
     # Default: ""
+
+    scan-mode:
+    # Scan mode: "differential" for PR scans, "full" for complete repository scans
+    #
+    # Required: false
+    # Default: differential
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
