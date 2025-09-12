@@ -14,13 +14,6 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ secrets.TURO_GITHUB_WORKFLOWS_APP_ID }}
-          private-key: ${{ secrets.TURO_GITHUB_WORKFLOWS_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
       - uses: open-turo/actions-security/static-analysis@v4
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
