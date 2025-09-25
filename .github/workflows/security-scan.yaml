@@ -18,8 +18,3 @@ jobs:
       - uses: open-turo/actions-security/static-analysis@v4
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
-          # Uses default "ci" mode for context-aware scanning:
-          # - Differential scans for pull requests (including forks)
-          # - Full scans for main branch pushes
-          # - pull_request_target allows PR comments from forks
-          # - Can override with scan-mode: "scan" for explicit full scans
