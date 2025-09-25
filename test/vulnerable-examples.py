@@ -43,7 +43,7 @@ def execute_command(cmd):
 
 # === Hardcoded Secrets ===
 API_KEY = "sk-1234567890abcdef123456789"  # VULNERABLE: hardcoded API key
-DATABASE_PASSWORD = "admin123"  # VULNERABLE: hardcoded password  
+DATABASE_PASSWORD = "admin123"  # VULNERABLE: hardcoded password
 JWT_SECRET = "super-secret-jwt-key-123"  # VULNERABLE: hardcoded JWT secret
 AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"  # VULNERABLE: hardcoded AWS key
 
