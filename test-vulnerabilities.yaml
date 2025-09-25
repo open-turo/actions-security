@@ -1,0 +1,121 @@
+# Test file with shell injection vulnerabilities for Semgrep testing
+# This file contains intentional security vulnerabilities for testing purposes
+
+name: Test Vulnerabilities
+
+on:
+  pull_request:
+  issues:
+  issue_comment:
+
+jobs:
+  vulnerable-shell-injection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vulnerable - Issue title injection
+        run: 'echo "Processing issue: ${{ github.event.issue.title }}"'
+        # This is vulnerable because github.event.issue.title can contain malicious input
+
+      - name: Vulnerable - Issue body injection
+        run: 'echo "Issue details: ${{ github.event.issue.body }}"'
+        # This is vulnerable because github.event.issue.body can contain malicious input
+
+      - name: Vulnerable - PR title injection
+        run: 'echo "PR title: ${{ github.event.pull_request.title }}"'
+        # This is vulnerable because github.event.pull_request.title can contain malicious input
+
+      - name: Vulnerable - PR body injection
+        run: 'echo "PR description: ${{ github.event.pull_request.body }}"'
+        # This is vulnerable because github.event.pull_request.body can contain malicious input
+
+      - name: Vulnerable - Comment body injection
+        run: 'echo "Comment: ${{ github.event.comment.body }}"'
+        # This is vulnerable because github.event.comment.body can contain malicious input
+
+      - name: Vulnerable - Review body injection
+        run: 'echo "Review: ${{ github.event.review.body }}"'
+        # This is vulnerable because github.event.review.body can contain malicious input
+
+      - name: Vulnerable - Review comment injection
+        run: 'echo "Review comment: ${{ github.event.review_comment.body }}"'
+        # This is vulnerable because github.event.review_comment.body can contain malicious input
+
+      - name: Vulnerable - Commit message injection
+        run: 'echo "Commit message: ${{ github.event.head_commit.message }}"'
+        # This is vulnerable because github.event.head_commit.message can contain malicious input
+
+      - name: Vulnerable - Author email injection
+        run: 'echo "Author email: ${{ github.event.head_commit.author.email }}"'
+        # This is vulnerable because github.event.head_commit.author.email can contain malicious input
+
+      - name: Vulnerable - Author name injection
+        run: 'echo "Author name: ${{ github.event.head_commit.author.name }}"'
+        # This is vulnerable because github.event.head_commit.author.name can contain malicious input
+
+      - name: Vulnerable - Head ref injection
+        run: 'echo "Head ref: ${{ github.event.pull_request.head.ref }}"'
+        # This is vulnerable because github.event.pull_request.head.ref can contain malicious input
+
+      - name: Vulnerable - Head label injection
+        run: 'echo "Head label: ${{ github.event.pull_request.head.label }}"'
+        # This is vulnerable because github.event.pull_request.head.label can contain malicious input
+
+      - name: Vulnerable - Default branch injection
+        run: 'echo "Default branch: ${{ github.event.pull_request.head.repo.default_branch }}"'
+        # This is vulnerable because github.event.pull_request.head.repo.default_branch can contain malicious input
+
+      - name: Vulnerable - GitHub head ref injection
+        run: 'echo "GitHub head ref: ${{ github.head_ref }}"'
+        # This is vulnerable because github.head_ref can contain malicious input
+
+      - name: Vulnerable - Inputs injection
+        run: 'echo "Input value: ${{ github.event.inputs.test_input }}"'
+        # This is vulnerable because github.event.inputs can contain malicious input
+
+      - name: Vulnerable - Discussion title injection
+        run: 'echo "Discussion title: ${{ github.event.discussion.title }}"'
+        # This is vulnerable because github.event.discussion.title can contain malicious input
+
+      - name: Vulnerable - Discussion body injection
+        run: 'echo "Discussion body: ${{ github.event.discussion.body }}"'
+        # This is vulnerable because github.event.discussion.body can contain malicious input
+
+      - name: Vulnerable - Page name injection
+        run: 'echo "Page name: ${{ github.event.pages[0].page_name }}"'
+        # This is vulnerable because github.event.pages can contain malicious input
+
+      - name: Vulnerable - Commits author email injection
+        run: 'echo "Commits author email: ${{ github.event.commits[0].author.email }}"'
+        # This is vulnerable because github.event.commits can contain malicious input
+
+      - name: Vulnerable - Commits author name injection
+        run: 'echo "Commits author name: ${{ github.event.commits[0].author.name }}"'
+        # This is vulnerable because github.event.commits can contain malicious input
+
+  # These are examples of SECURE implementations that should NOT trigger the rule
+  secure-implementations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Secure - Using environment variable
+        run: 'echo "Processing issue: $ISSUE_TITLE"'
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        # This is secure because we use an intermediate environment variable
+
+      - name: Secure - Using environment variable with quotes
+        run: 'echo "Issue details: $ISSUE_BODY"'
+        env:
+          ISSUE_BODY: "${{ github.event.issue.body }}"
+        # This is secure because we use an intermediate environment variable with quotes
+
+      - name: Secure - Using safe context data
+        run: 'echo "Repository: ${{ github.repository }}"'
+        # This is secure because github.repository is not user-controlled
+
+      - name: Secure - Using safe context data
+        run: 'echo "Actor: ${{ github.actor }}"'
+        # This is secure because github.actor is not user-controlled
+
+      - name: Secure - Using safe context data
+        run: 'echo "Ref: ${{ github.ref }}"'
+        # This is secure because github.ref is not user-controlled
