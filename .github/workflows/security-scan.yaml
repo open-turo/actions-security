@@ -15,6 +15,11 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - uses: open-turo/actions-security/static-analysis@v4
         with:
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
