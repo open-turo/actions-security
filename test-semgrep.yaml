@@ -1,0 +1,15 @@
+# Test file to verify Semgrep PR comments are working
+# This file contains a simple shell injection vulnerability
+
+name: Test Semgrep Comments
+
+on:
+  pull_request:
+
+jobs:
+  test-vulnerability:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test shell injection
+        run: 'echo "PR title: ${{ github.event.pull_request.title }}"'
+        # This should trigger the run-shell-injection Semgrep rule
