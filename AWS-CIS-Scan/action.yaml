@@ -1,0 +1,210 @@
+name: Wiz IaC Security Scan
+description: Scans IaC files for security misconfigurations using Wiz CLI with CIS Benchmark Enforcement
+
+inputs:
+  scan-path:
+    required: false
+    default: "."
+    description: Path to scan for IaC files
+
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+
+  policy:
+    required: false
+    default: "CIS Benchmark Enforcement"
+    description: Wiz policy to use for scanning
+
+  scan-types:
+    required: false
+    description: Narrow scan to specific IaC types (Terraform, CloudFormation, Kubernetes, Dockerfile, Ansible)
+
+  enable-secrets-scan:
+    required: false
+    default: "true"
+    description: Enable secrets scanning
+
+  policy-hits-only:
+    required: false
+    default: "true"
+    description: Only show findings that violate the policy
+
+  output-format:
+    required: false
+    default: "human"
+    description: Output format (human, json, sarif)
+
+  fail-on-findings:
+    required: false
+    default: "true"
+    description: Fail the action if security issues are found
+
+  tags:
+    required: false
+    description: Tags to mark the scan with (KEY=VALUE format, comma-separated)
+
+  timeout:
+    required: false
+    default: "10m"
+    description: Scan timeout duration
+
+outputs:
+  scan-passed:
+    description: Whether the scan passed the policy check
+    value: ${{ steps.scan.outputs.scan_passed }}
+
+  critical-count:
+    description: Number of critical severity findings
+    value: ${{ steps.scan.outputs.critical_count }}
+
+  high-count:
+    description: Number of high severity findings
+    value: ${{ steps.scan.outputs.high_count }}
+
+  medium-count:
+    description: Number of medium severity findings
+    value: ${{ steps.scan.outputs.medium_count }}
+
+  low-count:
+    description: Number of low severity findings
+    value: ${{ steps.scan.outputs.low_count }}
+
+  total-findings:
+    description: Total number of findings
+    value: ${{ steps.scan.outputs.total_findings }}
+
+  scan-url:
+    description: URL to the scan report in Wiz portal
+    value: ${{ steps.scan.outputs.scan_url }}
+
+  summary:
+    description: Human-readable summary of findings
+    value: ${{ steps.scan.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Wiz CLI
+      shell: bash
+      run: |
+        echo "::group::Download and install Wiz CLI"
+        curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
+        chmod +x wizcli
+        sudo mv wizcli /usr/local/bin/
+        echo "::endgroup::"
+
+        echo "::group::Authenticate with Wiz"
+        wizcli auth --id "${{ inputs.wiz-client-id }}" --secret "${{ inputs.wiz-client-secret }}"
+        echo "::endgroup::"
+
+    - name: Run IaC Security Scan
+      id: scan
+      shell: bash
+      run: |
+        echo "::group::Running Wiz IaC scan"
+
+        # Build scan command
+        SCAN_CMD="wizcli iac scan"
+        SCAN_CMD="$SCAN_CMD --path '${{ inputs.scan-path }}'"
+        SCAN_CMD="$SCAN_CMD --policy '${{ inputs.policy }}'"
+        SCAN_CMD="$SCAN_CMD --format '${{ inputs.output-format }}'"
+        SCAN_CMD="$SCAN_CMD --timeout '${{ inputs.timeout }}'"
+
+        # Add optional parameters
+        [[ "${{ inputs.scan-types }}" ]] && SCAN_CMD="$SCAN_CMD --types '${{ inputs.scan-types }}'"
+        [[ "${{ inputs.enable-secrets-scan }}" == "false" ]] && SCAN_CMD="$SCAN_CMD --secrets=false"
+        [[ "${{ inputs.policy-hits-only }}" == "true" ]] && SCAN_CMD="$SCAN_CMD --policy-hits-only"
+
+        # Add tags if provided
+        if [[ -n "${{ inputs.tags }}" ]]; then
+          IFS=',' read -ra TAGS <<< "${{ inputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            SCAN_CMD="$SCAN_CMD --tag '$tag'"
+          done
+        fi
+
+        echo "Executing: $SCAN_CMD"
+
+        # Run scan and capture output
+        SCAN_OUTPUT=$(eval $SCAN_CMD 2>&1) || SCAN_EXIT_CODE=$?
+        SCAN_EXIT_CODE=${SCAN_EXIT_CODE:-0}
+
+        echo "$SCAN_OUTPUT"
+        echo "::endgroup::"
+
+        # Parse results
+        echo "::group::Parse scan results"
+
+        # Clean ANSI codes for parsing
+        CLEAN_OUTPUT=$(echo "$SCAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
+
+        # Extract counts - Wiz CLI format: "Failed rules: CRITICAL: X, HIGH: Y, MEDIUM: Z, LOW: W"
+        CRITICAL=$(echo "$CLEAN_OUTPUT" | grep -oP "CRITICAL:\s*\K\d+" || echo "0")
+        HIGH=$(echo "$CLEAN_OUTPUT" | grep -oP "HIGH:\s*\K\d+" || echo "0")
+        MEDIUM=$(echo "$CLEAN_OUTPUT" | grep -oP "MEDIUM:\s*\K\d+" || echo "0")
+        LOW=$(echo "$CLEAN_OUTPUT" | grep -oP "LOW:\s*\K\d+" || echo "0")
+
+        # Calculate total
+        TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
+
+        # Extract scan URL if available
+        SCAN_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+
+        # Determine if scan passed
+        if [[ $SCAN_EXIT_CODE -eq 0 && $TOTAL -eq 0 ]]; then
+          SCAN_PASSED="true"
+          SUMMARY="Scan passed with no findings"
+        else
+          SCAN_PASSED="false"
+          SUMMARY="Scan found $TOTAL issue(s): Critical=$CRITICAL, High=$HIGH, Medium=$MEDIUM, Low=$LOW"
+        fi
+
+        # Set outputs
+        echo "scan_passed=$SCAN_PASSED" >> $GITHUB_OUTPUT
+        echo "critical_count=$CRITICAL" >> $GITHUB_OUTPUT
+        echo "high_count=$HIGH" >> $GITHUB_OUTPUT
+        echo "medium_count=$MEDIUM" >> $GITHUB_OUTPUT
+        echo "low_count=$LOW" >> $GITHUB_OUTPUT
+        echo "total_findings=$TOTAL" >> $GITHUB_OUTPUT
+        echo "scan_url=$SCAN_URL" >> $GITHUB_OUTPUT
+        echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+        echo "::endgroup::"
+
+        # Create annotations for GitHub UI
+        if [[ $TOTAL -gt 0 ]]; then
+          if [[ $CRITICAL -gt 0 || $HIGH -gt 0 ]]; then
+            echo "::error::$SUMMARY"
+          else
+            echo "::warning::$SUMMARY"
+          fi
+
+          [[ -n "$SCAN_URL" ]] && echo "::notice::View detailed report: $SCAN_URL"
+        else
+          echo "::notice::$SUMMARY"
+        fi
+
+        # Fail if configured and findings exist
+        if [[ "${{ inputs.fail-on-findings }}" == "true" && $TOTAL -gt 0 ]]; then
+          echo "::error::Failing build due to security findings"
+          exit 1
+        fi
+
+    - name: Upload Scan Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: wiz-iac-scan-results
+        path: |
+          ${{ github.workspace }}/*.sarif
+          ${{ github.workspace }}/*.json
+        retention-days: 30
+        if-no-files-found: ignore
