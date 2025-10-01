@@ -1,0 +1,52 @@
+# Edge case test file for shell injection vulnerabilities
+# This file contains edge cases and complex patterns for thorough testing
+
+name: Test Shell Injection Edge Cases
+
+on:
+  pull_request:
+
+jobs:
+  test-edge-cases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test with quotes and special characters
+        run: 'echo "Title with quotes: \"${{ github.event.pull_request.title }}\""'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with array access
+        run: 'echo "Commits author: ${{ github.event.commits[0].author.email }}"'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with page name access
+        run: 'echo "Page name: ${{ github.event.pages[0].page_name }}"'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with nested object access
+        run: 'echo "Head repo: ${{ github.event.pull_request.head.repo.default_branch }}"'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with GitHub head ref
+        run: 'echo "GitHub head ref: ${{ github.head_ref }}"'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with discussion body
+        run: 'echo "Discussion body: ${{ github.event.discussion.body }}"'
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with complex conditional
+        run: |
+          if [ -n "${{ github.event.pull_request.title }}" ]; then
+            echo "Title is not empty: ${{ github.event.pull_request.title }}"
+          else
+            echo "Title is empty"
+          fi
+        # This should trigger the run-shell-injection Semgrep rule
+
+      - name: Test with multiple conditions
+        run: |
+          if [ "${{ github.event.pull_request.title }}" = "test" ] && [ -n "${{ github.event.issue.body }}" ]; then
+            echo "Both conditions met"
+            echo "Issue: ${{ github.event.issue.body }}"
+          fi
+        # This should trigger multiple run-shell-injection Semgrep rules
