@@ -126,8 +126,10 @@ runs:
       if: inputs.s3-bucket-name != ''
       id: wiz_cli_cache_key
       run: |
-        VERSION="${{ inputs.wiz-cli-version }}"
+        VERSION="$WIZ_CLI_VERSION"
         echo "key=wiz-cli-$VERSION-$(uname -s)-$(uname -m)" >> $GITHUB_OUTPUT
+      env:
+        WIZ_CLI_VERSION: ${{ inputs.wiz-cli-version }}
       shell: bash
 
     - name: Load cached Wiz CLI if available
@@ -146,7 +148,7 @@ runs:
     - name: Download Wiz CLI
       if: inputs.s3-bucket-name == '' || steps.wiz-cli-cache.outputs.cache-hit != 'true'
       run: |
-        VERSION="${{ inputs.wiz-cli-version }}"
+        VERSION="$WIZ_CLI_VERSION"
         if [ "$VERSION" = "latest" ]; then
           URL="https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64"
         else
@@ -155,6 +157,8 @@ runs:
         curl -o wizcli "$URL"
         chmod +x wizcli
         sudo mv wizcli /usr/local/bin/
+      env:
+        WIZ_CLI_VERSION: ${{ inputs.wiz-cli-version }}
       shell: bash
 
     - name: Save Wiz CLI to cache
@@ -184,9 +188,9 @@ runs:
         echo "Running container setup commands after checkout"
 
         # Parse container-setup-env input into environment variables
-        if [ -n "${{ inputs.container-setup-env }}" ]; then
+        if [ -n "$CONTAINER_SETUP_ENV" ]; then
           echo "Setting up environment variables from container-setup-env input"
-          IFS=',' read -ra ENV_PAIRS <<< "${{ inputs.container-setup-env }}"
+          IFS=',' read -ra ENV_PAIRS <<< "$CONTAINER_SETUP_ENV"
           for pair in "${ENV_PAIRS[@]}"; do
             if [[ $pair == *"="* ]]; then
               export "$pair"
@@ -196,7 +200,10 @@ runs:
         fi
 
         # Run the container setup commands
-        ${{ inputs.container-setup-commands }}
+        $CONTAINER_SETUP_COMMANDS
+      env:
+        CONTAINER_SETUP_ENV: ${{ inputs.container-setup-env }}
+        CONTAINER_SETUP_COMMANDS: ${{ inputs.container-setup-commands }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -267,7 +274,9 @@ runs:
     - name: Determine Image Name
       id: set_image_name
       run: |
-        echo "image_name=${{ steps.docker-build.outputs.image-with-tag }}" >> $GITHUB_OUTPUT
+        echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+      env:
+        IMAGE_NAME: ${{ steps.docker-build.outputs.image-with-tag }}
       shell: bash
 
     - name: Get Dockerfile Path
