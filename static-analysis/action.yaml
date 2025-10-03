@@ -25,13 +25,16 @@ runs:
         python --version
         which pipx || echo "pipx not found"
 
-        echo "🔍 Scan mode: ${{ inputs.scan-mode }}"
+        echo "🔍 Scan mode: $SCAN_MODE"
 
-        if [ "${{ inputs.scan-mode }}" = "scan" ]; then
+        if [ "$SCAN_MODE" = "scan" ]; then
           echo "🔍 Running full repository scan (semgrep scan --config auto)"
-          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep scan --config auto
+          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==1.101.0 semgrep scan --config auto
         else
           echo "🔍 Running context-aware scan (semgrep ci - auto-detects PR vs full based on environment)"
-          SEMGREP_APP_TOKEN="${{ inputs.semgrep-app-token }}" pipx run --spec semgrep==1.101.0 semgrep ci
+          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==1.101.0 semgrep ci
         fi
+      env:
+        SCAN_MODE: ${{ inputs.scan-mode }}
+        SEMGREP_APP_TOKEN: ${{ inputs.semgrep-app-token }}
       shell: bash
