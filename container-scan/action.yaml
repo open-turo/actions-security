@@ -199,8 +199,9 @@ runs:
           done
         fi
 
-        # Run the container setup commands
-        $CONTAINER_SETUP_COMMANDS
+        # Run the container setup commands in current shell with set -e for safety
+        set -e
+        eval "$CONTAINER_SETUP_COMMANDS"
       env:
         CONTAINER_SETUP_ENV: ${{ inputs.container-setup-env }}
         CONTAINER_SETUP_COMMANDS: ${{ inputs.container-setup-commands }}
