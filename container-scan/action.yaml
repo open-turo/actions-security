@@ -287,8 +287,8 @@ runs:
         DOCKERFILE="./Dockerfile"
 
         # Check if docker config file exists and use it if available
-        if [ -f "${{ inputs.docker-config-file }}" ]; then
-          CONFIG_DOCKERFILE=$(jq -r '.dockerfile // ""' ${{ inputs.docker-config-file }})
+        if [ -f "$DOCKER_CONFIG_FILE" ]; then
+          CONFIG_DOCKERFILE=$(jq -r '.dockerfile // ""' "$DOCKER_CONFIG_FILE")
           if [ -n "$CONFIG_DOCKERFILE" ]; then
             DOCKERFILE="$CONFIG_DOCKERFILE"
           fi
@@ -303,6 +303,8 @@ runs:
           echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
           echo "::warning::Dockerfile not found at $DOCKERFILE, scanning without Dockerfile metadata"
         fi
+      env:
+        DOCKER_CONFIG_FILE: ${{ inputs.docker-config-file }}
       shell: bash
 
     - name: Scan Container Image
