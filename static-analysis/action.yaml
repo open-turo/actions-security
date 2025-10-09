@@ -17,6 +17,7 @@ runs:
 
     - uses: actions/checkout@v5
       with:
+        ref: ${{ github.event.pull_request.base.sha || github.ref }}
         fetch-depth: 2
 
     - run: |
