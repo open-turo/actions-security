@@ -1,116 +1,106 @@
-name: Infrastructure as Code Security Scan
-description: Scans IaC files for security misconfigurations using Wiz CLI
+name: Wiz IaC Security Scan
+description: Scans IaC files for security misconfigurations using Wiz CLI with CIS Benchmark Enforcement
 
 inputs:
   scan-path:
     required: false
     default: "."
     description: Path to scan for IaC files
-  parameter-files:
+
+  wiz-client-id:
+    required: true
+    description: Wiz Client ID for service account authentication
+
+  wiz-client-secret:
+    required: true
+    description: Wiz Client Secret for service account authentication
+
+  policy:
     required: false
-    description: Comma separated list of globs of external parameter files to include while scanning
+    default: "CIS Benchmark Enforcement"
+    description: Wiz policy to use for scanning
+
   scan-types:
     required: false
-    description: Narrow down the scan to specific types (e.g., Terraform, CloudFormation, Kubernetes, Dockerfile, Ansible)
-  policies:
-    required: false
-    description: Scan policies to use. Can be passed multiple times to evaluate multiple policies
-  scan-name:
-    required: false
-    description: Custom name for the scan
+    description: Narrow scan to specific IaC types (Terraform, CloudFormation, Kubernetes, Dockerfile, Ansible)
+
   enable-secrets-scan:
     required: false
     default: "true"
     description: Enable secrets scanning
+
   policy-hits-only:
     required: false
     default: "false"
-    description: Only display results that failed the applied policies
-  ignore-comments:
+    description: Only show findings that violate the policy
+
+  output-format:
+    required: false
+    default: "human"
+    description: Output format (human, json, sarif)
+
+  fail-on-findings:
     required: false
     default: "false"
-    description: Enable ignore comments to exclude parts of code from scanning
-  discovered-resources:
-    required: false
-    default: "false"
-    description: In supported platforms (currently Terraform only), discover cloud resources and include them in the scan's JSON output
-  expand-cloudformation-intrinsics:
-    required: false
-    default: "false"
-    description: Expand intrinsic functions when processing CloudFormation templates
-  wiz-client-id:
-    required: true
-    description: Wiz Client ID for IAC service account authentication
-  wiz-client-secret:
-    required: true
-    description: Wiz Client Secret for IAC service account authentication
-  github-token:
-    required: false
-    description: GitHub token for repository operations
+    description: Fail the action if security issues are found
+
   tags:
     required: false
-    description: Tags to mark the scan with (KEY=VALUE format)
-  project:
-    required: false
-    description: Scan's scoped project UUID
+    description: Tags to mark the scan with (KEY=VALUE format, comma-separated)
+
   timeout:
     required: false
-    default: "1h0m0s"
-    description: Operation timeout
-  max-file-size:
-    required: false
-    default: "64MiB"
-    description: Maximum file size to scan
+    default: "10m"
+    description: Scan timeout duration
 
 outputs:
-  stdout:
-    description: The complete output from the Wiz CLI IAC scan
-    value: ${{ steps.scan.outputs.stdout }}
-  has_findings:
-    description: Whether the scan found any security issues
-    value: ${{ steps.scan.outputs.has_findings }}
-  scan_status:
-    description: Status of the scan (success/failure/warning)
-    value: ${{ steps.scan.outputs.scan_status }}
-  policy_violations:
-    description: Number of policy violations found
-    value: ${{ steps.scan.outputs.policy_violations }}
-  secret_findings:
-    description: Number of secret findings
-    value: ${{ steps.scan.outputs.secret_findings }}
-  misconfiguration_findings:
-    description: Number of misconfiguration findings
-    value: ${{ steps.scan.outputs.misconfiguration_findings }}
-  scan_url:
-    description: URL to the scan report in Wiz portal
-    value: ${{ steps.scan.outputs.scan_url }}
-  scanned_files:
-    description: Number of files scanned
-    value: ${{ steps.scan.outputs.scanned_files }}
-  findings_summary:
-    description: Summary of all findings
-    value: ${{ steps.scan.outputs.findings_summary }}
-  critical_count:
+  scan-passed:
+    description: Whether the scan passed the policy check
+    value: ${{ steps.scan.outputs.scan-passed }}
+
+  critical-count:
     description: Number of critical severity findings
-    value: ${{ steps.scan.outputs.critical_count }}
-  high_count:
+    value: ${{ steps.scan.outputs.critical-count }}
+
+  high-count:
     description: Number of high severity findings
-    value: ${{ steps.scan.outputs.high_count }}
-  medium_count:
+    value: ${{ steps.scan.outputs.high-count }}
+
+  medium-count:
     description: Number of medium severity findings
-    value: ${{ steps.scan.outputs.medium_count }}
-  low_count:
+    value: ${{ steps.scan.outputs.medium-count }}
+
+  low-count:
     description: Number of low severity findings
-    value: ${{ steps.scan.outputs.low_count }}
-  info_count:
-    description: Number of informational severity findings
-    value: ${{ steps.scan.outputs.info_count }}
-  total_failed_rules:
-    description: Total number of failed rules
-    value: ${{ steps.scan.outputs.total_failed_rules }}
-  severity_summary:
-    description: Summary of findings by severity
-    value: ${{ steps.scan.outputs.severity_summary }}
+    value: ${{ steps.scan.outputs.low-count }}
+
+  total-findings:
+    description: Total number of findings
+    value: ${{ steps.scan.outputs.total-findings }}
+
+  scan-url:
+    description: URL to the scan report in Wiz portal
+    value: ${{ steps.scan.outputs.scan-url }}
+
+  summary:
+    description: Human-readable summary of findings
+    value: ${{ steps.scan.outputs.summary }}
+
+  top-issues:
+    description: Top critical and high issues with details
+    value: ${{ steps.scan.outputs.top-issues }}
+
+  resource-summary:
+    description: Summary of affected resources by type
+    value: ${{ steps.scan.outputs.resource-summary }}
+
+  affected-files-count:
+    description: Number of files with findings
+    value: ${{ steps.scan.outputs.affected-files-count }}
+
+  json-results:
+    description: Raw JSON results for detailed parsing
+    value: ${{ steps.scan.outputs.json-results }}
 
 runs:
   using: composite
@@ -118,320 +108,216 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Download Wiz CLI
+    - name: Setup Wiz CLI
+      shell: bash
       run: |
+        echo "::group::Download and install Wiz CLI"
         curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
         chmod +x wizcli
         sudo mv wizcli /usr/local/bin/
-      shell: bash
+        echo "::endgroup::"
 
-    - name: Authenticate with Wiz
-      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
-      env:
-        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
-        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
-      shell: bash
-
-    - name: Detect IaC Files
-      id: detect-files
-      run: |
-        echo "Scanning for IaC files in ${{ inputs.scan-path }}..."
-
-        # Find various IaC file types
-        TERRAFORM_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.tf" -o -name "*.tfvars" -o -name "*.tfplan" -o -name "*.tfplanjson" \) 2>/dev/null | wc -l)
-        CLOUDFORMATION_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) -exec grep -l "AWSTemplateFormatVersion\|Resources:" {} \; 2>/dev/null | wc -l)
-        KUBERNETES_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "apiVersion:\|kind:" {} \; 2>/dev/null | wc -l)
-        DOCKERFILE_COUNT=$(find ${{ inputs.scan-path }} -type f \( -name "Dockerfile*" -o -name "*.dockerfile" \) 2>/dev/null | wc -l)
-        ANSIBLE_FILES=$(find ${{ inputs.scan-path }} -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "hosts:\|tasks:\|playbook" {} \; 2>/dev/null | wc -l)
-
-        TOTAL_FILES=$((TERRAFORM_FILES + CLOUDFORMATION_FILES + KUBERNETES_FILES + DOCKERFILE_COUNT + ANSIBLE_FILES))
-
-        echo "Found IaC files:"
-        echo "  Terraform: $TERRAFORM_FILES"
-        echo "  CloudFormation: $CLOUDFORMATION_FILES"
-        echo "  Kubernetes: $KUBERNETES_FILES"
-        echo "  Dockerfile: $DOCKERFILE_COUNT"
-        echo "  Ansible: $ANSIBLE_FILES"
-        echo "  Total: $TOTAL_FILES"
-
-        echo "terraform_files=$TERRAFORM_FILES" >> $GITHUB_OUTPUT
-        echo "cloudformation_files=$CLOUDFORMATION_FILES" >> $GITHUB_OUTPUT
-        echo "kubernetes_files=$KUBERNETES_FILES" >> $GITHUB_OUTPUT
-        echo "dockerfile_files=$DOCKERFILE_COUNT" >> $GITHUB_OUTPUT
-        echo "ansible_files=$ANSIBLE_FILES" >> $GITHUB_OUTPUT
-        echo "total_files=$TOTAL_FILES" >> $GITHUB_OUTPUT
-
-        if [ "$TOTAL_FILES" -eq 0 ]; then
-          echo "::warning::No IaC files detected in the specified path"
-        fi
-      shell: bash
+        echo "::group::Authenticate with Wiz"
+        wizcli auth --id "${{ inputs.wiz-client-id }}" --secret "${{ inputs.wiz-client-secret }}"
+        echo "::endgroup::"
 
     - name: Run IaC Security Scan
       id: scan
+      shell: bash
       run: |
-        # Define results file for human-readable output
-        RESULTS_FILE="${{ github.workspace }}/iac-results.stdout"
+        echo "::group::Running Wiz IaC scan"
 
-        # Get the scan command
-        SCAN_ARGS=(
-          "iac" "scan"
-          "--path" "${{ inputs.scan-path }}"
-          "--format" "human"
-        )
+        # Run scan with JSON output for detailed parsing
+        JSON_CMD="wizcli iac scan"
+        JSON_CMD="$JSON_CMD --path '${{ inputs.scan-path }}'"
+        JSON_CMD="$JSON_CMD --policy '${{ inputs.policy }}'"
+        JSON_CMD="$JSON_CMD --format json"
+        JSON_CMD="$JSON_CMD --timeout '${{ inputs.timeout }}'"
 
-        # Add parameter files if specified
-        if [ -n "${{ inputs.parameter-files }}" ]; then
-          SCAN_ARGS+=("--parameter-files" "${{ inputs.parameter-files }}")
-        fi
+        # Add optional parameters
+        [[ "${{ inputs.scan-types }}" ]] && JSON_CMD="$JSON_CMD --types '${{ inputs.scan-types }}'"
+        [[ "${{ inputs.enable-secrets-scan }}" == "false" ]] && JSON_CMD="$JSON_CMD --secrets=false"
+        [[ "${{ inputs.policy-hits-only }}" == "true" ]] && JSON_CMD="$JSON_CMD --policy-hits-only"
 
-        # Add scan types if specified
-        if [ -n "${{ inputs.scan-types }}" ]; then
-          SCAN_ARGS+=("--types" "${{ inputs.scan-types }}")
-        fi
-
-        # Add policies if specified
-        if [ -n "${{ inputs.policies }}" ]; then
-          IFS=',' read -ra POLICY_ARRAY <<< "${{ inputs.policies }}"
-          for policy in "${POLICY_ARRAY[@]}"; do
-            SCAN_ARGS+=("--policy" "$policy")
+        # Add tags if provided
+        if [[ -n "${{ inputs.tags }}" ]]; then
+          IFS=',' read -ra TAGS <<< "${{ inputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            JSON_CMD="$JSON_CMD --tag '$tag'"
           done
         fi
 
-        # Add scan name if specified
-        if [ -n "${{ inputs.scan-name }}" ]; then
-          SCAN_ARGS+=("--name" "${{ inputs.scan-name }}")
-        fi
+        echo "Executing JSON scan: $JSON_CMD"
+        JSON_OUTPUT=$(eval $JSON_CMD 2>&1) || SCAN_EXIT_CODE=$?
+        SCAN_EXIT_CODE=${SCAN_EXIT_CODE:-0}
 
-        # Add secrets scanning option
-        if [ "${{ inputs.enable-secrets-scan }}" == "false" ]; then
-          SCAN_ARGS+=("--secrets=false")
-        fi
+        # Extract only the JSON part (last line that starts with {)
+        JSON_OUTPUT=$(echo "$JSON_OUTPUT" | grep '^{' | tail -1)
+        echo "$JSON_OUTPUT" > scan-results.json
+        echo "Saved JSON results to scan-results.json for detailed parsing"
 
-        # Add policy hits only if specified
-        if [ "${{ inputs.policy-hits-only }}" == "true" ]; then
-          SCAN_ARGS+=("--policy-hits-only")
-        fi
+        # Also run human format for display
+        HUMAN_CMD="${JSON_CMD/--format json/--format human}"
+        echo "Executing human format scan..."
+        HUMAN_OUTPUT=$(eval $HUMAN_CMD 2>&1) || true
 
-        # Add ignore comments if specified
-        if [ "${{ inputs.ignore-comments }}" == "true" ]; then
-          SCAN_ARGS+=("--ignore-comments")
-        fi
+        echo "Human-readable output:"
+        echo "$HUMAN_OUTPUT"
+        echo "::endgroup::"
 
-        # Add discovered resources if specified
-        if [ "${{ inputs.discovered-resources }}" == "true" ]; then
-          SCAN_ARGS+=("--discovered-resources")
-        fi
+        echo "::group::Parse scan results"
 
-        # Add CloudFormation intrinsics expansion if specified
-        if [ "${{ inputs.expand-cloudformation-intrinsics }}" == "true" ]; then
-          SCAN_ARGS+=("--expand-cloudformation-intrinsics")
-        fi
+        # Parse counts from human output (more reliable)
+        CLEAN_OUTPUT=$(echo "$HUMAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
 
-        # Add tags if specified
-        if [ -n "${{ inputs.tags }}" ]; then
-          IFS=',' read -ra TAG_ARRAY <<< "${{ inputs.tags }}"
-          for tag in "${TAG_ARRAY[@]}"; do
-            SCAN_ARGS+=("--tag" "$tag")
-          done
-        fi
-
-        # Add project if specified
-        if [ -n "${{ inputs.project }}" ]; then
-          SCAN_ARGS+=("--project" "${{ inputs.project }}")
-        fi
-
-        # Add timeout
-        SCAN_ARGS+=("--timeout" "${{ inputs.timeout }}")
-
-        # Add max file size
-        SCAN_ARGS+=("--max-file-size" "${{ inputs.max-file-size }}")
-
-        # Run the scan and capture output and exit code
-        echo "Running IaC scan with arguments: ${SCAN_ARGS[*]}"
-        EXIT_CODE=0
-        SCAN_OUTPUT=$(wizcli "${SCAN_ARGS[@]}" 2>&1) || EXIT_CODE=$?
-        echo "IaC scan completed with exit code: $EXIT_CODE"
-
-        # Save human-readable output to results file
-        echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
-
-        # Parse the human-readable output to extract findings
-        echo "Extracting findings from scan output..."
-
-        # Clean up ANSI color codes for more reliable parsing
-        CLEAN_OUTPUT=$(echo "$SCAN_OUTPUT" | sed 's/\x1B\[[0-9;]*[JKmsu]//g')
-
-        # Extract various metrics from the actual Wiz CLI output format
-        # Look for "Failed rules: CRITICAL: X, HIGH: Y, MEDIUM: Z, LOW: W, INFORMATIONAL: V"
-        CRITICAL_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "CRITICAL: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        HIGH_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "HIGH: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        MEDIUM_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "MEDIUM: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        LOW_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "LOW: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-        INFO_COUNT=$(echo "$CLEAN_OUTPUT" | grep -o "INFORMATIONAL: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-
-        # Extract total failed rules
-        TOTAL_FAILED_RULES=$(echo "$CLEAN_OUTPUT" | grep -o "Total failed rules: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-
-        # Extract files scanned count
-        SCANNED_FILES=$(echo "$CLEAN_OUTPUT" | grep -o "Files scanned: [0-9]\+" | grep -o "[0-9]\+" || echo "${{ steps.detect-files.outputs.total_files }}")
+        # Extract counts using various patterns for robustness
+        CRITICAL=$(echo "$CLEAN_OUTPUT" | grep -oP "CRITICAL:\s*\K\d+" | head -1 || echo "0")
+        HIGH=$(echo "$CLEAN_OUTPUT" | grep -oP "HIGH:\s*\K\d+" | head -1 || echo "0")
+        MEDIUM=$(echo "$CLEAN_OUTPUT" | grep -oP "MEDIUM:\s*\K\d+" | head -1 || echo "0")
+        LOW=$(echo "$CLEAN_OUTPUT" | grep -oP "LOW:\s*\K\d+" | head -1 || echo "0")
 
         # Ensure we have valid numbers
-        [[ -z "$CRITICAL_COUNT" ]] && CRITICAL_COUNT=0
-        [[ -z "$HIGH_COUNT" ]] && HIGH_COUNT=0
-        [[ -z "$MEDIUM_COUNT" ]] && MEDIUM_COUNT=0
-        [[ -z "$LOW_COUNT" ]] && LOW_COUNT=0
-        [[ -z "$INFO_COUNT" ]] && INFO_COUNT=0
-        [[ -z "$TOTAL_FAILED_RULES" ]] && TOTAL_FAILED_RULES=0
-        [[ -z "$SCANNED_FILES" ]] && SCANNED_FILES=0
+        CRITICAL=${CRITICAL:-0}
+        HIGH=${HIGH:-0}
+        MEDIUM=${MEDIUM:-0}
+        LOW=${LOW:-0}
 
-        # Validate counts are numbers
-        [[ "$CRITICAL_COUNT" =~ ^[0-9]+$ ]] || CRITICAL_COUNT=0
-        [[ "$HIGH_COUNT" =~ ^[0-9]+$ ]] || HIGH_COUNT=0
-        [[ "$MEDIUM_COUNT" =~ ^[0-9]+$ ]] || MEDIUM_COUNT=0
-        [[ "$LOW_COUNT" =~ ^[0-9]+$ ]] || LOW_COUNT=0
-        [[ "$INFO_COUNT" =~ ^[0-9]+$ ]] || INFO_COUNT=0
-        [[ "$TOTAL_FAILED_RULES" =~ ^[0-9]+$ ]] || TOTAL_FAILED_RULES=0
-        [[ "$SCANNED_FILES" =~ ^[0-9]+$ ]] || SCANNED_FILES=0
+        TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
 
-        # Calculate total from individual counts if total failed rules is 0 or missing
-        CALCULATED_TOTAL=$((CRITICAL_COUNT + HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT + INFO_COUNT))
-        if [ "$TOTAL_FAILED_RULES" -eq 0 ] && [ "$CALCULATED_TOTAL" -gt 0 ]; then
-          TOTAL_FAILED_RULES=$CALCULATED_TOTAL
+        echo "Parsed counts - Critical: $CRITICAL, High: $HIGH, Medium: $MEDIUM, Low: $LOW, Total: $TOTAL"
+
+        # Extract scan URL
+        SCAN_URL=$(echo "$HUMAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+
+        # Try to extract detailed information from JSON if valid
+        TOP_ISSUES=""
+        RESOURCE_SUMMARY=""
+        AFFECTED_FILES_COUNT="0"
+
+        if [[ -f scan-results.json ]] && jq empty scan-results.json 2>/dev/null; then
+          echo "Parsing JSON results for details..."
+
+          # Parse the Wiz JSON structure
+          TOP_ISSUES=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[] |
+               select(.severity == "CRITICAL" or .severity == "HIGH") |
+               .matches[] |
+               "• **[\(.severity // "HIGH")]** \(.resourceName) in <code>\(.fileName):\(.lineNumber)</code>"
+              ] |
+              .[0:10] |
+              join("\n")
+            else
+              ""
+            end
+          ' scan-results.json 2>/dev/null || echo "")
+
+          AFFECTED_FILES_COUNT=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[].matches[].fileName] | unique | length
+            else
+              0
+            end
+          ' scan-results.json 2>/dev/null || echo "0")
+
+          RESOURCE_SUMMARY=$(jq -r '
+            if .result.ruleMatches then
+              [.result.ruleMatches[].matches[] |
+               {resourceType: (.resourceName | split("[")[0])}
+              ] |
+              group_by(.resourceType) |
+              map("• **\(.[0].resourceType)**: \(length) issue(s)") |
+              .[0:5] |
+              join("\n")
+            else
+              ""
+            end
+          ' scan-results.json 2>/dev/null || echo "")
+        else
+          echo "Could not parse JSON output for detailed information"
         fi
 
-        # Map to the expected output format for backward compatibility
-        # For IaC scans, all failed rules are considered policy violations since they're rule-based
-        POLICY_VIOLATIONS=$TOTAL_FAILED_RULES
-
-        # Look for specific secret findings in the output (separate from rule failures)
-        SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
-        [[ "$SECRET_FINDINGS" =~ ^[0-9]+$ ]] || SECRET_FINDINGS=0
-
-        # For IaC scans, misconfigurations are typically captured as rule failures
-        # Only count separate misconfigurations if explicitly mentioned
-        MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration" | grep -o "[0-9]\+" | head -1 || echo "0")
-        [[ "$MISCONFIGURATION_FINDINGS" =~ ^[0-9]+$ ]] || MISCONFIGURATION_FINDINGS=0
-
-        # Fallback parsing for older output formats
-        if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
-          echo "Trying fallback patterns for finding counts..."
-          POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -o "Policy violations: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-          SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Secret findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-          MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -o "Misconfiguration findings: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-
-          # Final fallback - try to extract any numbers from relevant lines
-          if [ "$POLICY_VIOLATIONS" -eq 0 ] && [ "$SECRET_FINDINGS" -eq 0 ] && [ "$MISCONFIGURATION_FINDINGS" -eq 0 ]; then
-            POLICY_VIOLATIONS=$(echo "$CLEAN_OUTPUT" | grep -i "violations\|failed" | grep -o "[0-9]\+" | head -1 || echo "0")
-            SECRET_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "secret" | grep -o "[0-9]\+" | head -1 || echo "0")
-            MISCONFIGURATION_FINDINGS=$(echo "$CLEAN_OUTPUT" | grep -i "misconfiguration\|issue" | grep -o "[0-9]\+" | head -1 || echo "0")
+        # Create summary with emoji indicators
+        if [[ $SCAN_EXIT_CODE -eq 0 && $TOTAL -eq 0 ]]; then
+          SCAN_PASSED="true"
+          SUMMARY="✅ **Scan Status:** Passed - No findings detected"
+        else
+          SCAN_PASSED="false"
+          if [[ $CRITICAL -gt 0 ]]; then
+            SUMMARY="🔴 **Scan Status:** Critical issues found - $TOTAL total ($CRITICAL critical, $HIGH high, $MEDIUM medium, $LOW low)"
+          elif [[ $HIGH -gt 0 ]]; then
+            SUMMARY="🟠 **Scan Status:** High severity issues found - $TOTAL total ($HIGH high, $MEDIUM medium, $LOW low)"
+          elif [[ $MEDIUM -gt 0 ]]; then
+            SUMMARY="🟡 **Scan Status:** Medium severity issues found - $TOTAL total ($MEDIUM medium, $LOW low)"
+          else
+            SUMMARY="🔵 **Scan Status:** Low severity issues found - $TOTAL total ($LOW low)"
           fi
         fi
 
-        # Extract report URL from output
-        REPORT_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
+        # Set outputs with hyphens (matching the output declarations)
+        echo "scan-passed=$SCAN_PASSED" >> $GITHUB_OUTPUT
+        echo "critical-count=$CRITICAL" >> $GITHUB_OUTPUT
+        echo "high-count=$HIGH" >> $GITHUB_OUTPUT
+        echo "medium-count=$MEDIUM" >> $GITHUB_OUTPUT
+        echo "low-count=$LOW" >> $GITHUB_OUTPUT
+        echo "total-findings=$TOTAL" >> $GITHUB_OUTPUT
+        echo "scan-url=$SCAN_URL" >> $GITHUB_OUTPUT
+        echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+        echo "affected-files-count=$AFFECTED_FILES_COUNT" >> $GITHUB_OUTPUT
 
-        echo "Extracted findings:"
-        echo "Critical: $CRITICAL_COUNT"
-        echo "High: $HIGH_COUNT"
-        echo "Medium: $MEDIUM_COUNT"
-        echo "Low: $LOW_COUNT"
-        echo "Informational: $INFO_COUNT"
-        echo "Total failed rules: $TOTAL_FAILED_RULES"
-        echo "Policy violations: $POLICY_VIOLATIONS"
-        echo "Secret findings: $SECRET_FINDINGS"
-        echo "Misconfiguration findings: $MISCONFIGURATION_FINDINGS"
-        echo "Scanned files: $SCANNED_FILES"
-        echo "Report URL: $REPORT_URL"
+        # Multi-line outputs
+        {
+          echo "top-issues<<EOF"
+          echo "$TOP_ISSUES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
-        # Export findings as outputs
-        echo "policy_violations=$POLICY_VIOLATIONS" >> $GITHUB_OUTPUT
-        echo "secret_findings=$SECRET_FINDINGS" >> $GITHUB_OUTPUT
-        echo "misconfiguration_findings=$MISCONFIGURATION_FINDINGS" >> $GITHUB_OUTPUT
-        echo "scanned_files=$SCANNED_FILES" >> $GITHUB_OUTPUT
-        echo "scan_url=$REPORT_URL" >> $GITHUB_OUTPUT
+        {
+          echo "resource-summary<<EOF"
+          echo "$RESOURCE_SUMMARY"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
-        # Export severity breakdown for enhanced reporting
-        echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
-        echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
-        echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
-        echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
-        echo "info_count=$INFO_COUNT" >> $GITHUB_OUTPUT
-        echo "total_failed_rules=$TOTAL_FAILED_RULES" >> $GITHUB_OUTPUT
-
-        # Create a findings summary string
-        TOTAL_FINDINGS=$((POLICY_VIOLATIONS + SECRET_FINDINGS + MISCONFIGURATION_FINDINGS))
-        FINDINGS_SUMMARY="Policy Violations: $POLICY_VIOLATIONS, Secrets: $SECRET_FINDINGS, Misconfigurations: $MISCONFIGURATION_FINDINGS, Total: $TOTAL_FINDINGS"
-        SEVERITY_SUMMARY="Critical: $CRITICAL_COUNT, High: $HIGH_COUNT, Medium: $MEDIUM_COUNT, Low: $LOW_COUNT, Info: $INFO_COUNT"
-        echo "findings_summary=$FINDINGS_SUMMARY" >> $GITHUB_OUTPUT
-        echo "severity_summary=$SEVERITY_SUMMARY" >> $GITHUB_OUTPUT
-
-        # Create a cleaned version of scan results (without ANSI colors) for better processing
-        echo "$CLEAN_OUTPUT" > "${{ github.workspace }}/iac-results.clean"
-
-        # Truncate stdout if too large for GitHub actions output
-        MAX_LENGTH=1000000  # GitHub has limits on output size
-        TRUNCATED_OUTPUT="${SCAN_OUTPUT:0:$MAX_LENGTH}"
-        if [ ${#SCAN_OUTPUT} -gt $MAX_LENGTH ]; then
-          TRUNCATED_OUTPUT="${TRUNCATED_OUTPUT}... (output truncated, see iac-results.stdout for full output)"
-        fi
-        echo "stdout<<EOF" >> $GITHUB_OUTPUT
-        echo "$TRUNCATED_OUTPUT" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-
-        # Process exit code and set appropriate status
-        if [ "$EXIT_CODE" -eq 4 ] || [ "$TOTAL_FINDINGS" -gt 0 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=warning" >> $GITHUB_OUTPUT
-          echo "::warning::IaC scan found security issues: $FINDINGS_SUMMARY"
-        elif [ "$EXIT_CODE" -ne 0 ]; then
-          echo "has_findings=true" >> $GITHUB_OUTPUT
-          echo "scan_status=failure" >> $GITHUB_OUTPUT
-          echo "::error::IaC scan failed with exit code $EXIT_CODE"
-        else
-          echo "has_findings=false" >> $GITHUB_OUTPUT
-          echo "scan_status=success" >> $GITHUB_OUTPUT
-          echo "IaC scan completed successfully with no issues found"
-        fi
-      shell: bash
-
-    - name: Process scan results for reporting
-      run: |
-        # Check if we have a results file
-        if [ -f "${{ github.workspace }}/iac-results.stdout" ]; then
-          echo "IaC scan results saved to ${{ github.workspace }}/iac-results.stdout ($(wc -c < ${{ github.workspace}}/iac-results.stdout) bytes)"
-
-          # Escape scan output for JSON
-          SCAN_OUTPUT=$(cat "${{ github.workspace }}/iac-results.clean" | jq -Rs .)
-
-          # Create a JSON file with the scan details for the HTML report
-          cat > "${{ github.workspace }}/iac-results.json" << EOL
+        # Output the JSON results for the reusable workflow to parse
+        if [[ -f scan-results.json ]]; then
           {
-            "scanOutput": ${SCAN_OUTPUT},
-            "policyViolations": ${{ steps.scan.outputs.policy_violations }},
-            "secretFindings": ${{ steps.scan.outputs.secret_findings }},
-            "misconfigurationFindings": ${{ steps.scan.outputs.misconfiguration_findings }},
-            "scannedFiles": ${{ steps.scan.outputs.scanned_files }},
-            "scanStatus": "${{ steps.scan.outputs.scan_status }}",
-            "scanPath": "${{ inputs.scan-path }}",
-            "reportUrl": "${{ steps.scan.outputs.scan_url }}",
-            "terraformFiles": ${{ steps.detect-files.outputs.terraform_files }},
-            "cloudformationFiles": ${{ steps.detect-files.outputs.cloudformation_files }},
-            "kubernetesFiles": ${{ steps.detect-files.outputs.kubernetes_files }},
-            "dockerfileFiles": ${{ steps.detect-files.outputs.dockerfile_files }},
-            "ansibleFiles": ${{ steps.detect-files.outputs.ansible_files }},
-            "criticalCount": ${{ steps.scan.outputs.critical_count }},
-            "highCount": ${{ steps.scan.outputs.high_count }},
-            "mediumCount": ${{ steps.scan.outputs.medium_count }},
-            "lowCount": ${{ steps.scan.outputs.low_count }},
-            "infoCount": ${{ steps.scan.outputs.info_count }},
-            "totalFailedRules": ${{ steps.scan.outputs.total_failed_rules }},
-            "severitySummary": "${{ steps.scan.outputs.severity_summary }}"
-          }
-        EOL
-          echo "Created JSON data file for HTML report"
-        else
-          echo "::error::No IaC scan results file found at ${{ github.workspace }}/iac-results.stdout"
-          touch "${{ github.workspace}}/iac-results.stdout"
-          echo "{}" > "${{ github.workspace}}/iac-results.json"
+            echo "json-results<<EOF"
+            cat scan-results.json
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          echo "JSON results exported as output for detailed parsing"
         fi
-      shell: bash
+
+        echo "::endgroup::"
+
+        # Create GitHub annotations
+        if [[ $TOTAL -gt 0 ]]; then
+          if [[ $CRITICAL -gt 0 ]]; then
+            echo "::error::IaC scan found $CRITICAL critical security issues"
+          elif [[ $HIGH -gt 0 ]]; then
+            echo "::warning::IaC scan found $HIGH high severity issues"
+          else
+            echo "::notice::IaC scan found $TOTAL issues"
+          fi
+
+          [[ -n "$SCAN_URL" ]] && echo "::notice::View detailed report: $SCAN_URL"
+        else
+          echo "::notice::IaC scan passed with no findings"
+        fi
+
+        # Only fail if fail-on-findings is true AND there are critical/high issues
+        if [[ "${{ inputs.fail-on-findings }}" == "true" && ($CRITICAL -gt 0 || $HIGH -gt 0) ]]; then
+          echo "::error::Failing build due to critical/high security findings"
+          exit 1
+        fi
+
+    - name: Upload Scan Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: wiz-iac-scan-results
+        path: |
+          ${{ github.workspace }}/scan-results.json
+          ${{ github.workspace }}/*.sarif
+        retention-days: 30
+        if-no-files-found: ignore
