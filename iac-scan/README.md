@@ -2,15 +2,12 @@
 
 <!-- prettier-ignore-start -->
 <!-- action-docs-description source="action.yaml" -->
-
 ## Description
 
 Scans IaC files for security misconfigurations using Wiz CLI with CIS Benchmark Enforcement
-
 <!-- action-docs-description source="action.yaml" -->
 
 <!-- action-docs-usage source="action.yaml" -->
-
 ## Usage
 
 ```yaml
@@ -82,6 +79,5 @@ Scans IaC files for security misconfigurations using Wiz CLI with CIS Benchmark 
     # Required: false
     # Default: 10m
 ```
-
 <!-- action-docs-usage source="action.yaml" -->
 <!-- prettier-ignore-end -->
