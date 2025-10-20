@@ -309,20 +309,25 @@ runs:
 
     - name: Scan Container Image
       id: scan
+      env:
+        IMAGE_WITH_TAG: ${{ steps.docker-build.outputs.image-with-tag }}
+        DOCKERFILE_EXISTS: ${{ steps.dockerfile-config.outputs.dockerfile_exists }}
+        DOCKERFILE_PATH: ${{ steps.dockerfile-config.outputs.dockerfile }}
+        WORKSPACE: ${{ github.workspace }}
       run: |
         # Build scan command
-        SCAN_CMD="wizcli docker scan --image ${{ steps.docker-build.outputs.image-with-tag }}"
+        SCAN_CMD="wizcli docker scan --image $IMAGE_WITH_TAG"
 
         # Add dockerfile if it exists
-        if [ "${{ steps.dockerfile-config.outputs.dockerfile_exists }}" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --dockerfile ${{ steps.dockerfile-config.outputs.dockerfile }}"
+        if [ "$DOCKERFILE_EXISTS" == "true" ]; then
+          SCAN_CMD="$SCAN_CMD --dockerfile $DOCKERFILE_PATH"
         fi
 
         # Add common scan options with human-readable format
         SCAN_CMD="$SCAN_CMD --show-vulnerability-details --format human"
 
         # Define results file for human-readable output
-        RESULTS_FILE="${{ github.workspace }}/results.stdout"
+        RESULTS_FILE="$WORKSPACE/results.stdout"
 
         # Run the scan and capture output and exit code
         echo "Running scan command: $SCAN_CMD"
