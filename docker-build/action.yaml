@@ -68,6 +68,11 @@ runs:
       run: echo "$GITHUB_CONTEXT"
     - id: config
       shell: bash
+      env:
+        DOCKER_CONFIG_FILE: ${{ inputs.docker-config-file }}
+        IMAGE_VERSION: ${{ inputs.image-version }}
+        IMAGE_PLATFORM: ${{ inputs.image-platform }}
+        DOCKER_METADATA_TAGS: ${{ inputs.docker-metadata-tags }}
       run: |
         # if docker-config file does not exist - fail
         if [ ! -f "$DOCKER_CONFIG_FILE" ]; then
@@ -82,11 +87,6 @@ runs:
         echo "image-version: $IMAGE_VERSION"
         echo "image-platform: $IMAGE_PLATFORM"
         echo "docker-metadata-tags: $DOCKER_METADATA_TAGS"
-      env:
-        DOCKER_CONFIG_FILE: ${{ inputs.docker-config-file }}
-        IMAGE_VERSION: ${{ inputs.image-version }}
-        IMAGE_PLATFORM: ${{ inputs.image-platform }}
-        DOCKER_METADATA_TAGS: ${{ inputs.docker-metadata-tags }}
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
     - name: Set up Docker Buildx
