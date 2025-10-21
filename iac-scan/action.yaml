@@ -110,6 +110,9 @@ runs:
 
     - name: Setup Wiz CLI
       shell: bash
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
       run: |
         echo "::group::Download and install Wiz CLI"
         curl -o wizcli https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64
@@ -118,31 +121,40 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Authenticate with Wiz"
-        wizcli auth --id "${{ inputs.wiz-client-id }}" --secret "${{ inputs.wiz-client-secret }}"
+        wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
         echo "::endgroup::"
 
     - name: Run IaC Security Scan
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.scan-path }}
+        POLICY: ${{ inputs.policy }}
+        TIMEOUT: ${{ inputs.timeout }}
+        SCAN_TYPES: ${{ inputs.scan-types }}
+        ENABLE_SECRETS_SCAN: ${{ inputs.enable-secrets-scan }}
+        POLICY_HITS_ONLY: ${{ inputs.policy-hits-only }}
+        TAGS: ${{ inputs.tags }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
       run: |
         echo "::group::Running Wiz IaC scan"
 
         # Run scan with JSON output for detailed parsing
         JSON_CMD="wizcli iac scan"
-        JSON_CMD="$JSON_CMD --path '${{ inputs.scan-path }}'"
-        JSON_CMD="$JSON_CMD --policy '${{ inputs.policy }}'"
+        JSON_CMD="$JSON_CMD --path '$SCAN_PATH'"
+        JSON_CMD="$JSON_CMD --policy '$POLICY'"
         JSON_CMD="$JSON_CMD --format json"
-        JSON_CMD="$JSON_CMD --timeout '${{ inputs.timeout }}'"
+        JSON_CMD="$JSON_CMD --timeout '$TIMEOUT'"
 
         # Add optional parameters
-        [[ "${{ inputs.scan-types }}" ]] && JSON_CMD="$JSON_CMD --types '${{ inputs.scan-types }}'"
-        [[ "${{ inputs.enable-secrets-scan }}" == "false" ]] && JSON_CMD="$JSON_CMD --secrets=false"
-        [[ "${{ inputs.policy-hits-only }}" == "true" ]] && JSON_CMD="$JSON_CMD --policy-hits-only"
+        [[ "$SCAN_TYPES" ]] && JSON_CMD="$JSON_CMD --types '$SCAN_TYPES'"
+        [[ "$ENABLE_SECRETS_SCAN" == "false" ]] && JSON_CMD="$JSON_CMD --secrets=false"
+        [[ "$POLICY_HITS_ONLY" == "true" ]] && JSON_CMD="$JSON_CMD --policy-hits-only"
 
         # Add tags if provided
-        if [[ -n "${{ inputs.tags }}" ]]; then
-          IFS=',' read -ra TAGS <<< "${{ inputs.tags }}"
-          for tag in "${TAGS[@]}"; do
+        if [[ -n "$TAGS" ]]; then
+          IFS=',' read -ra TAGS_ARR <<< "$TAGS"
+          for tag in "${TAGS_ARR[@]}"; do
             JSON_CMD="$JSON_CMD --tag '$tag'"
           done
         fi
@@ -306,7 +318,7 @@ runs:
         fi
 
         # Only fail if fail-on-findings is true AND there are critical/high issues
-        if [[ "${{ inputs.fail-on-findings }}" == "true" && ($CRITICAL -gt 0 || $HIGH -gt 0) ]]; then
+        if [[ "$FAIL_ON_FINDINGS" == "true" && ($CRITICAL -gt 0 || $HIGH -gt 0) ]]; then
           echo "::error::Failing build due to critical/high security findings"
           exit 1
         fi
