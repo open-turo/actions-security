@@ -8,6 +8,10 @@ inputs:
     required: false
     default: "ci"
     description: 'Scan mode: "ci" for context-aware scanning (default), "scan" for full repository scans'
+  semgrep-version:
+    required: false
+    default: "1.144.0"
+    description: "Semgrep version to use. Minimum 1.111.0 recommended for malicious dependency detection, 1.144.0+ for optimal performance"
 runs:
   using: composite
   steps:
@@ -20,22 +24,35 @@ runs:
         ref: ${{ github.event.pull_request.base.sha || github.ref }}
         fetch-depth: 2
 
-    - run: |
+    - name: Verify Semgrep Version
+      run: |
+        echo "::group::Semgrep Version Information"
+        echo "📦 Installing Semgrep version: $SEMGREP_VERSION"
+        pipx run --spec semgrep==$SEMGREP_VERSION semgrep --version
+        echo "::endgroup::"
+      env:
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+      shell: bash
+
+    - name: Run Semgrep Scan
+      run: |
         echo "Debug PATH information:"
         echo $PATH
         python --version
         which pipx || echo "pipx not found"
 
         echo "🔍 Scan mode: $SCAN_MODE"
+        echo "📦 Using Semgrep version: $SEMGREP_VERSION"
 
         if [ "$SCAN_MODE" = "scan" ]; then
           echo "🔍 Running full repository scan (semgrep scan --config auto)"
-          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==1.101.0 semgrep scan --config auto
+          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==$SEMGREP_VERSION semgrep scan --config auto
         else
           echo "🔍 Running context-aware scan (semgrep ci - auto-detects PR vs full based on environment)"
-          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==1.101.0 semgrep ci
+          SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" pipx run --spec semgrep==$SEMGREP_VERSION semgrep ci
         fi
       env:
         SCAN_MODE: ${{ inputs.scan-mode }}
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
         SEMGREP_APP_TOKEN: ${{ inputs.semgrep-app-token }}
       shell: bash
