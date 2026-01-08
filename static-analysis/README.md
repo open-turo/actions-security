@@ -24,6 +24,12 @@ GitHub Action that scans code changes being made and posts security findings as 
     #
     # Required: false
     # Default: ci
+
+    semgrep-version:
+    # Semgrep version to use. Minimum 1.111.0 recommended for malicious dependency detection, 1.144.0+ for optimal performance
+    #
+    # Required: false
+    # Default: 1.144.0
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
