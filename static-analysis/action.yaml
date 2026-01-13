@@ -10,8 +10,8 @@ inputs:
     description: 'Scan mode: "ci" for context-aware scanning (default), "scan" for full repository scans'
   semgrep-version:
     required: false
-    default: "1.144.0"
-    description: "Semgrep version to use. Minimum 1.111.0 recommended for malicious dependency detection, 1.144.0+ for optimal performance"
+    default: "1.147.0"
+    description: "Semgrep version to use. Minimum 1.111.0 recommended for malicious dependency detection, 1.147.0 (latest) for optimal performance"
 runs:
   using: composite
   steps:
