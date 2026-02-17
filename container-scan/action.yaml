@@ -74,6 +74,10 @@ inputs:
     required: false
     description: Environment variables for container setup as key-value pairs (e.g., AWS_ACCESS_KEY_ID=value,ARTIFACTORY_USERNAME=value)
     default: ""
+  debug:
+    required: false
+    description: Enable debug output to display full scan results in the workflow logs
+    default: "false"
 
 outputs:
   stdout:
@@ -103,6 +107,21 @@ outputs:
   scan_url:
     description: URL to the scan report
     value: ${{ steps.scan.outputs.scan_url }}
+  secrets_count:
+    description: Count of secrets found in the image
+    value: ${{ steps.scan.outputs.secrets_count }}
+  sensitive_data_count:
+    description: Count of sensitive data findings
+    value: ${{ steps.scan.outputs.sensitive_data_count }}
+  malware_count:
+    description: Count of malware findings
+    value: ${{ steps.scan.outputs.malware_count }}
+  failed_policies:
+    description: List of failed policy names
+    value: ${{ steps.scan.outputs.failed_policies }}
+  failed_policies_count:
+    description: Count of failed policies
+    value: ${{ steps.scan.outputs.failed_policies_count }}
   image-id:
     description: The Docker image ID (SHA256)
     value: ${{ steps.docker-metadata.outputs.image-id }}
@@ -150,9 +169,9 @@ runs:
       run: |
         VERSION="$WIZ_CLI_VERSION"
         if [ "$VERSION" = "latest" ]; then
-          URL="https://downloads.wiz.io/wizcli/latest/wizcli-linux-amd64"
+          URL="https://downloads.wiz.io/v1/wizcli/latest/wizcli-linux-amd64"
         else
-          URL="https://downloads.wiz.io/wizcli/$VERSION/wizcli-linux-amd64"
+          URL="https://downloads.wiz.io/v1/wizcli/$VERSION/wizcli-linux-amd64"
         fi
         curl -o wizcli "$URL"
         chmod +x wizcli
@@ -170,13 +189,6 @@ runs:
         key: ${{ steps.wiz_cli_cache_key.outputs.key }}
       env:
         AWS_REGION: ${{ inputs.s3-bucket-region }}
-
-    - name: Authenticate with Wiz
-      run: wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
-      env:
-        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
-        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
-      shell: bash
 
     - name: Setup Tools
       uses: open-turo/action-setup-tools@v3
@@ -314,26 +326,42 @@ runs:
         DOCKERFILE_EXISTS: ${{ steps.dockerfile-config.outputs.dockerfile_exists }}
         DOCKERFILE_PATH: ${{ steps.dockerfile-config.outputs.dockerfile }}
         WORKSPACE: ${{ github.workspace }}
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
+        DEBUG: ${{ inputs.debug }}
       run: |
-        # Build scan command
-        SCAN_CMD="wizcli docker scan --image $IMAGE_WITH_TAG"
+        # Define results files
+        JSON_RESULTS_FILE="$WORKSPACE/wizcli-scan-results.json"
+        RESULTS_FILE="$WORKSPACE/results.stdout"
+
+        # Build scan command arguments
+        SCAN_ARGS=("scan" "container-image" "$IMAGE_WITH_TAG")
+        SCAN_ARGS+=("--client-id" "$WIZ_CLIENT_ID")
+        SCAN_ARGS+=("--client-secret" "$WIZ_CLIENT_SECRET")
 
         # Add dockerfile if it exists
         if [ "$DOCKERFILE_EXISTS" == "true" ]; then
-          SCAN_CMD="$SCAN_CMD --dockerfile $DOCKERFILE_PATH"
+          SCAN_ARGS+=("--dockerfile" "$DOCKERFILE_PATH")
         fi
 
-        # Add common scan options with human-readable format
-        SCAN_CMD="$SCAN_CMD --show-vulnerability-details --format human"
+        # Add output options
+        SCAN_ARGS+=("--stdout" "human")
+        SCAN_ARGS+=("--json-output-file" "$JSON_RESULTS_FILE")
 
-        # Define results file for human-readable output
-        RESULTS_FILE="$WORKSPACE/results.stdout"
+        # Log the command (without secrets)
+        echo "Running scan command: wizcli scan container-image $IMAGE_WITH_TAG --client-id [REDACTED] --client-secret [REDACTED] --dockerfile $DOCKERFILE_PATH --stdout human --json-output-file $JSON_RESULTS_FILE"
 
         # Run the scan and capture output and exit code
-        echo "Running scan command: $SCAN_CMD"
         EXIT_CODE=0
-        SCAN_OUTPUT=$($SCAN_CMD 2>&1) || EXIT_CODE=$?
+        SCAN_OUTPUT=$(wizcli "${SCAN_ARGS[@]}" 2>&1) || EXIT_CODE=$?
         echo "Scan completed with exit code: $EXIT_CODE"
+
+        # Echo the scan output for debugging visibility (only when debug is enabled)
+        if [ "$DEBUG" == "true" ]; then
+          echo "=== Wiz CLI Scan Output ==="
+          echo "$SCAN_OUTPUT"
+          echo "=== End Scan Output ==="
+        fi
 
         # Save human-readable output to results.stdout
         echo "$SCAN_OUTPUT" > "$RESULTS_FILE"
@@ -385,6 +413,41 @@ runs:
         [[ "$MEDIUM_COUNT" =~ ^[0-9]+$ ]] || MEDIUM_COUNT=0
         [[ "$LOW_COUNT" =~ ^[0-9]+$ ]] || LOW_COUNT=0
 
+        # Parse additional findings from JSON output (secrets, sensitive data, malware, policies)
+        SECRETS_COUNT=0
+        SENSITIVE_DATA_COUNT=0
+        MALWARE_COUNT=0
+        FAILED_POLICIES=""
+        FAILED_POLICIES_COUNT=0
+
+        if [ -f "$JSON_RESULTS_FILE" ]; then
+          echo "Parsing additional findings from JSON output..."
+
+          # Extract secrets count
+          SECRETS_COUNT=$(jq -r '.result.secrets // [] | length' "$JSON_RESULTS_FILE" 2>/dev/null || echo "0")
+          [[ "$SECRETS_COUNT" =~ ^[0-9]+$ ]] || SECRETS_COUNT=0
+
+          # Extract sensitive data count
+          SENSITIVE_DATA_COUNT=$(jq -r '.result.sensitiveData // [] | length' "$JSON_RESULTS_FILE" 2>/dev/null || echo "0")
+          [[ "$SENSITIVE_DATA_COUNT" =~ ^[0-9]+$ ]] || SENSITIVE_DATA_COUNT=0
+
+          # Extract malware count
+          MALWARE_COUNT=$(jq -r '.result.malware // [] | length' "$JSON_RESULTS_FILE" 2>/dev/null || echo "0")
+          [[ "$MALWARE_COUNT" =~ ^[0-9]+$ ]] || MALWARE_COUNT=0
+
+          # Extract failed policies
+          FAILED_POLICIES=$(jq -r '[.result.policies[]? | select(.status == "FAILED") | .name] | join(", ")' "$JSON_RESULTS_FILE" 2>/dev/null || echo "")
+          FAILED_POLICIES_COUNT=$(jq -r '[.result.policies[]? | select(.status == "FAILED")] | length' "$JSON_RESULTS_FILE" 2>/dev/null || echo "0")
+          [[ "$FAILED_POLICIES_COUNT" =~ ^[0-9]+$ ]] || FAILED_POLICIES_COUNT=0
+
+          echo "Secrets found: $SECRETS_COUNT"
+          echo "Sensitive data found: $SENSITIVE_DATA_COUNT"
+          echo "Malware found: $MALWARE_COUNT"
+          echo "Failed policies ($FAILED_POLICIES_COUNT): $FAILED_POLICIES"
+        else
+          echo "JSON results file not found, skipping additional findings parsing"
+        fi
+
         # Extract report URL from human-readable output
         REPORT_URL=$(echo "$SCAN_OUTPUT" | grep -o "https://app.wiz.io/[^ ]*" | head -1 || echo "")
 
@@ -395,11 +458,18 @@ runs:
         echo "Low: $LOW_COUNT"
         echo "Report URL: $REPORT_URL"
 
-        # Export counts as outputs
+        # Export vulnerability counts as outputs
         echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
         echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
         echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
         echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+
+        # Export additional findings as outputs
+        echo "secrets_count=$SECRETS_COUNT" >> $GITHUB_OUTPUT
+        echo "sensitive_data_count=$SENSITIVE_DATA_COUNT" >> $GITHUB_OUTPUT
+        echo "malware_count=$MALWARE_COUNT" >> $GITHUB_OUTPUT
+        echo "failed_policies=$FAILED_POLICIES" >> $GITHUB_OUTPUT
+        echo "failed_policies_count=$FAILED_POLICIES_COUNT" >> $GITHUB_OUTPUT
 
         # Create a clean vulnerability summary string
         VULN_SUMMARY="CRITICAL: $CRITICAL_COUNT, HIGH: $HIGH_COUNT, MEDIUM: $MEDIUM_COUNT, LOW: $LOW_COUNT"
@@ -445,6 +515,11 @@ runs:
         HIGH_COUNT: ${{ steps.scan.outputs.high_count }}
         MEDIUM_COUNT: ${{ steps.scan.outputs.medium_count }}
         LOW_COUNT: ${{ steps.scan.outputs.low_count }}
+        SECRETS_COUNT: ${{ steps.scan.outputs.secrets_count }}
+        SENSITIVE_DATA_COUNT: ${{ steps.scan.outputs.sensitive_data_count }}
+        MALWARE_COUNT: ${{ steps.scan.outputs.malware_count }}
+        FAILED_POLICIES: ${{ steps.scan.outputs.failed_policies }}
+        FAILED_POLICIES_COUNT: ${{ steps.scan.outputs.failed_policies_count }}
         SCAN_STATUS: ${{ steps.scan.outputs.scan_status }}
         REPORT_URL: ${{ steps.scan.outputs.report_url }}
       run: |
@@ -468,6 +543,11 @@ runs:
             "highCount": $HIGH_COUNT,
             "mediumCount": $MEDIUM_COUNT,
             "lowCount": $LOW_COUNT,
+            "secretsCount": $SECRETS_COUNT,
+            "sensitiveDataCount": $SENSITIVE_DATA_COUNT,
+            "malwareCount": $MALWARE_COUNT,
+            "failedPolicies": "$FAILED_POLICIES",
+            "failedPoliciesCount": $FAILED_POLICIES_COUNT,
             "scanStatus": "$SCAN_STATUS",
             "imageName": "${IMAGE_NAME}",
             "reportUrl": "$REPORT_URL"
@@ -486,6 +566,8 @@ runs:
       continue-on-error: true # Don't fail the workflow if this step fails
       env:
         IMAGE_WITH_TAG: ${{ steps.docker-build.outputs.image-with-tag }}
+        WIZ_CLIENT_ID: ${{ inputs.wiz-client-id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz-client-secret }}
       run: |
         # make sure we have a proper image tag
 
@@ -516,12 +598,12 @@ runs:
             IMAGE_WITH_DIGEST="${REPO_PATH}@sha256:${REGISTRY_DIGEST}"
             echo "using pushed image reference with digest: $IMAGE_WITH_DIGEST"
 
-            # tag in Wiz using registry digest
-            wizcli docker tag --image "$IMAGE_WITH_DIGEST" && \
+            # tag in Wiz using registry digest (wizcli v1.x requires credentials on tag command)
+            wizcli tag "$IMAGE_WITH_DIGEST" --client-id "$WIZ_CLIENT_ID" --client-secret "$WIZ_CLIENT_SECRET" && \
             echo "successfully tagged image in Wiz"
           else
             echo "could not extract registry digest, trying with tag reference..."
-            wizcli docker tag --image "$IMAGE_WITH_TAG" && \
+            wizcli tag "$IMAGE_WITH_TAG" --client-id "$WIZ_CLIENT_ID" --client-secret "$WIZ_CLIENT_SECRET" && \
             echo "successfully tagged image in Wiz using tag reference"
           fi
         else

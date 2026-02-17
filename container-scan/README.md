@@ -144,6 +144,12 @@ Scans container images for vulnerabilities using Wiz CLI
     #
     # Required: false
     # Default: ""
+
+    debug:
+    # Enable debug output to display full scan results in the workflow logs
+    #
+    # Required: false
+    # Default: false
 ```
 <!-- action-docs-usage source="action.yaml" -->
 
