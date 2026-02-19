@@ -357,7 +357,8 @@ runs:
         echo "Scan completed with exit code: $EXIT_CODE"
 
         # Echo the scan output for debugging visibility (only when debug is enabled)
-        if [ "$DEBUG" == "true" ]; then
+        # Supports both custom debug input and GitHub Actions' built-in debug mechanism
+        if [ "$DEBUG" == "true" ] || [ -n "$RUNNER_DEBUG" ]; then
           echo "=== Wiz CLI Scan Output ==="
           echo "$SCAN_OUTPUT"
           echo "=== End Scan Output ==="
