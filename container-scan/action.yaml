@@ -134,6 +134,9 @@ outputs:
   cache-hit:
     description: Whether the Wiz CLI cache was hit
     value: ${{ steps.wiz-cli-cache.outputs.cache-hit }}
+  scan-skipped:
+    description: Whether the scan was skipped due to no relevant file changes
+    value: ${{ steps.check-changes.outputs.should_skip }}
 
 runs:
   using: composite
@@ -141,8 +144,115 @@ runs:
     - name: Checkout Repository
       uses: actions/checkout@v6
 
+    - name: Check for container-related file changes
+      id: check-changes
+      shell: bash
+      run: |
+        # For schedule events, always scan (purpose is to catch drift/new CVEs)
+        if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+          echo "Scheduled run - will scan"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # For workflow_dispatch, always scan (user explicitly requested)
+        if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          echo "Manual trigger - will scan"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Checking for container-related file changes..."
+
+        # Determine SHAs based on event type
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+        elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          BASE_SHA="${{ github.event.before }}"
+          HEAD_SHA="${{ github.event.after }}"
+        else
+          echo "Unknown event type: $GITHUB_EVENT_NAME, will scan to be safe"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+          echo "Could not determine base SHA (possibly first commit), will scan to be safe"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Fetch base SHA for comparison
+        git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
+
+        # Define patterns for container-related files
+        PATTERNS=(
+          "Dockerfile"
+          "*.dockerfile"
+          "docker-compose*.yml"
+          "docker-compose*.yaml"
+          ".docker-config.json"
+          "package-lock.json"
+          "yarn.lock"
+          "pnpm-lock.yaml"
+          "Gemfile.lock"
+          "requirements.txt"
+          "requirements*.txt"
+          "poetry.lock"
+          "Pipfile.lock"
+          "go.sum"
+          "Cargo.lock"
+          "composer.lock"
+        )
+
+        # Get list of changed files
+        CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
+
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "Could not determine changed files, will scan to be safe"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+
+        # Check if any changed file matches our patterns
+        FOUND_MATCH=false
+        for file in $CHANGED_FILES; do
+          for pattern in "${PATTERNS[@]}"; do
+            if [[ "$file" == *"$pattern"* ]] || [[ "$(basename "$file")" == $pattern ]]; then
+              echo "Found matching file: $file (matches pattern: $pattern)"
+              FOUND_MATCH=true
+              break 2
+            fi
+          done
+        done
+
+        if [ "$FOUND_MATCH" = true ]; then
+          echo "Container-related files changed, will scan"
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+        else
+          echo "No container-related files changed, skipping scan"
+          echo "should_skip=true" >> $GITHUB_OUTPUT
+          echo "should_scan=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Skip notification
+      if: steps.check-changes.outputs.should_skip == 'true'
+      shell: bash
+      run: |
+        echo "::notice::Container scan skipped - no Dockerfile, lockfile, or container-related files changed in this PR"
+
     - name: Compute Wiz CLI cache key
-      if: inputs.s3-bucket-name != ''
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != ''
       id: wiz_cli_cache_key
       run: |
         VERSION="$WIZ_CLI_VERSION"
@@ -152,7 +262,7 @@ runs:
       shell: bash
 
     - name: Load cached Wiz CLI if available
-      if: inputs.s3-bucket-name != ''
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != ''
       uses: everpcpc/actions-cache@v2
       id: wiz-cli-cache
       with:
@@ -165,7 +275,7 @@ runs:
         AWS_REGION: ${{ inputs.s3-bucket-region }}
 
     - name: Download Wiz CLI
-      if: inputs.s3-bucket-name == '' || steps.wiz-cli-cache.outputs.cache-hit != 'true'
+      if: steps.check-changes.outputs.should_scan == 'true' && (inputs.s3-bucket-name == '' || steps.wiz-cli-cache.outputs.cache-hit != 'true')
       run: |
         VERSION="$WIZ_CLI_VERSION"
         if [ "$VERSION" = "latest" ]; then
@@ -181,7 +291,7 @@ runs:
       shell: bash
 
     - name: Save Wiz CLI to cache
-      if: inputs.s3-bucket-name != '' && steps.wiz-cli-cache.outputs.cache-hit != 'true'
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != '' && steps.wiz-cli-cache.outputs.cache-hit != 'true'
       uses: everpcpc/actions-cache@v2
       with:
         bucket: ${{ inputs.s3-bucket-name }}
@@ -191,10 +301,11 @@ runs:
         AWS_REGION: ${{ inputs.s3-bucket-region }}
 
     - name: Setup Tools
+      if: steps.check-changes.outputs.should_scan == 'true'
       uses: open-turo/action-setup-tools@v3
 
     - name: Run Container Setup Commands
-      if: inputs.container-setup-commands != ''
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.container-setup-commands != ''
       shell: bash
       run: |
         echo "Running container setup commands after checkout"
@@ -219,18 +330,22 @@ runs:
         CONTAINER_SETUP_COMMANDS: ${{ inputs.container-setup-commands }}
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v4
+      if: steps.check-changes.outputs.should_scan == 'true'
+      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      if: steps.check-changes.outputs.should_scan == 'true'
+      uses: docker/setup-buildx-action@v3
 
     - name: Login to Docker Hub
-      uses: docker/login-action@v4
+      if: steps.check-changes.outputs.should_scan == 'true'
+      uses: docker/login-action@v3
       with:
         username: ${{ inputs.dockerhub-user }}
         password: ${{ inputs.dockerhub-password }}
 
     - name: Docker meta
+      if: steps.check-changes.outputs.should_scan == 'true'
       id: meta
       uses: docker/metadata-action@v6
       with:
@@ -241,7 +356,7 @@ runs:
           ${{ inputs.image-tags }}
 
     - name: Build docker image
-      if: ${{ inputs.enable-docker-build == 'true' }}
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.enable-docker-build == 'true'
       uses: open-turo/actions-security/docker-build@v4
       id: docker-build
       with:
@@ -258,7 +373,7 @@ runs:
 
     - name: Get Docker Image metadata
       id: docker-metadata
-      if: ${{ inputs.enable-docker-build == 'true' }}
+      if: steps.check-changes.outputs.should_scan == 'true' && inputs.enable-docker-build == 'true'
       run: |
         IMAGE_WITH_TAG="${{ steps.docker-build.outputs.image-with-tag }}"
         echo "Processing image: $IMAGE_WITH_TAG"
@@ -285,6 +400,7 @@ runs:
       shell: bash
 
     - name: Determine Image Name
+      if: steps.check-changes.outputs.should_scan == 'true'
       id: set_image_name
       run: |
         echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
@@ -293,6 +409,7 @@ runs:
       shell: bash
 
     - name: Get Dockerfile Path
+      if: steps.check-changes.outputs.should_scan == 'true'
       id: dockerfile-config
       run: |
         # Default to Dockerfile in current directory
@@ -320,6 +437,7 @@ runs:
       shell: bash
 
     - name: Scan Container Image
+      if: steps.check-changes.outputs.should_scan == 'true'
       id: scan
       env:
         IMAGE_WITH_TAG: ${{ steps.docker-build.outputs.image-with-tag }}
@@ -613,7 +731,7 @@ runs:
       shell: bash
 
     - name: Cleanup Docker Image
-      if: always()
+      if: always() && steps.check-changes.outputs.should_scan == 'true'
       env:
         IMAGE_WITH_TAG: ${{ steps.docker-build.outputs.image-with-tag }}
       run: |
