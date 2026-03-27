@@ -7,6 +7,48 @@
 Scans container images for vulnerabilities using Wiz CLI
 <!-- action-docs-description source="action.yaml" -->
 
+## Smart Scan Triggers
+
+This action automatically skips container scanning on pull requests when no container-related files have changed. This optimization reduces CI time for PRs that don't affect the container image.
+
+### How it works
+
+- **On `pull_request` events**: The action checks if any container-related files changed compared to the base branch. If no relevant files changed, the scan is skipped.
+- **On `push` events**: The action checks if any container-related files changed compared to the previous commit. If no relevant files changed, the scan is skipped.
+- **On `workflow_dispatch` events**: The scan always runs (user explicitly requested it).
+- **On `schedule` events**: The scan always runs (designed to catch new CVEs and base image updates).
+
+### Files that trigger a scan
+
+The following file patterns will trigger a container scan:
+
+- `Dockerfile`, `*.dockerfile`
+- `docker-compose*.yml`, `docker-compose*.yaml`
+- `.docker-config.json`
+- Lockfiles: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Gemfile.lock`, `requirements.txt`, `poetry.lock`, `Pipfile.lock`, `go.sum`, `Cargo.lock`, `composer.lock`
+
+### Outputs
+
+The action provides a `scan-skipped` output that indicates whether the scan was skipped:
+
+```yaml
+- uses: open-turo/actions-security/container-scan@v4
+  id: scan
+  with:
+    # ... inputs
+
+- name: Check if scan was skipped
+  if: steps.scan.outputs.scan-skipped == 'true'
+  run: echo "Scan was skipped because no container-related files changed"
+```
+
+### Security Note
+
+This optimization is safe because:
+- Registry scanning (Wiz) continuously monitors images for new vulnerabilities
+- Scheduled scans catch base image updates and new CVE publications
+- Manual triggers (`workflow_dispatch`) always run a full scan
+
 <!-- action-docs-usage source="action.yaml" -->
 ## Usage
 
