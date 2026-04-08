@@ -135,7 +135,7 @@ outputs:
     description: Whether the Wiz CLI cache was hit
     value: ${{ steps.wiz-cli-cache.outputs.cache-hit }}
   scan-skipped:
-    description: Whether the scan was skipped due to no relevant file changes
+    description: Whether the scan was skipped due to no relevant file changes or PR is in draft state
     value: ${{ steps.check-changes.outputs.should_skip }}
 
 runs:
@@ -147,6 +147,8 @@ runs:
     - name: Check for container-related file changes
       id: check-changes
       shell: bash
+      env:
+        PR_IS_DRAFT: ${{ github.event.pull_request.draft }}
       run: |
         # For schedule events, always scan (purpose is to catch drift/new CVEs)
         if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
@@ -161,6 +163,15 @@ runs:
           echo "Manual trigger - will scan"
           echo "should_skip=false" >> $GITHUB_OUTPUT
           echo "should_scan=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # For draft PRs, skip scan to reduce CI load during active development
+        # Scan will run automatically when PR is marked ready for review
+        if [ "$PR_IS_DRAFT" = "true" ]; then
+          echo "Draft PR - skipping container scan"
+          echo "should_skip=true" >> $GITHUB_OUTPUT
+          echo "should_scan=false" >> $GITHUB_OUTPUT
           exit 0
         fi
 
@@ -208,6 +219,15 @@ runs:
           "go.sum"
           "Cargo.lock"
           "composer.lock"
+          ".dockerignore"
+          ".node-version"
+          ".nvmrc"
+          ".python-version"
+          "build.gradle"
+          "build.gradle.kts"
+          "pom.xml"
+          "uv.lock"
+          "bun.lock"
         )
 
         # Get list of changed files
