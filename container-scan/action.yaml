@@ -151,6 +151,7 @@ runs:
       shell: bash
       env:
         PR_IS_DRAFT: ${{ github.event.pull_request.draft }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         # For schedule events, always scan (purpose is to catch drift/new CVEs)
         if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
@@ -180,29 +181,40 @@ runs:
 
         echo "Checking for container-related file changes..."
 
-        # Determine SHAs based on event type
+        # Get list of changed files based on event type
+        CHANGED_FILES=""
         if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          # Use GitHub API to get only files changed in this PR.
+          # git diff base..head includes all divergence with the base branch, which causes
+          # false-positive scan triggers on active repos where base has container-file changes
+          # unrelated to this PR.
+          CHANGED_FILES=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename' \
+            --paginate 2>/dev/null) || CHANGED_FILES=""
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "Could not fetch PR files via API, falling back to git diff"
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
+            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
+          fi
         elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
           BASE_SHA="${{ github.event.before }}"
           HEAD_SHA="${{ github.event.after }}"
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Could not determine base SHA (possibly first push to branch), will scan to be safe"
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "should_scan=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
         else
           echo "Unknown event type: $GITHUB_EVENT_NAME, will scan to be safe"
           echo "should_skip=false" >> $GITHUB_OUTPUT
           echo "should_scan=true" >> $GITHUB_OUTPUT
           exit 0
         fi
-
-        if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-          echo "Could not determine base SHA (possibly first commit), will scan to be safe"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        # Fetch base SHA for comparison
-        git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
 
         # Define patterns for container-related files
         PATTERNS=(
@@ -232,9 +244,6 @@ runs:
           "uv.lock"
           "bun.lock"
         )
-
-        # Get list of changed files
-        CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
 
         if [ -z "$CHANGED_FILES" ]; then
           echo "Could not determine changed files, will scan to be safe"
