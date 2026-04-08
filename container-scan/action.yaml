@@ -143,6 +143,8 @@ runs:
   steps:
     - name: Checkout Repository
       uses: actions/checkout@v6
+      with:
+        fetch-depth: 2
 
     - name: Check for container-related file changes
       id: check-changes
