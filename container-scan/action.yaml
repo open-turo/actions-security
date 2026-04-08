@@ -172,6 +172,7 @@ runs:
           echo "Draft PR - skipping container scan"
           echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "should_scan=false" >> $GITHUB_OUTPUT
+          echo "skip_reason=draft_pr" >> $GITHUB_OUTPUT
           exit 0
         fi
 
@@ -263,13 +264,20 @@ runs:
           echo "No container-related files changed, skipping scan"
           echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "should_scan=false" >> $GITHUB_OUTPUT
+          echo "skip_reason=no_container_files" >> $GITHUB_OUTPUT
         fi
 
     - name: Skip notification
       if: steps.check-changes.outputs.should_skip == 'true'
       shell: bash
+      env:
+        SKIP_REASON: ${{ steps.check-changes.outputs.skip_reason }}
       run: |
-        echo "::notice::Container scan skipped - no Dockerfile, lockfile, or container-related files changed in this PR"
+        if [ "$SKIP_REASON" = "draft_pr" ]; then
+          echo "::notice::Container scan skipped - PR is in draft state. Scan will run automatically when PR is marked ready for review."
+        else
+          echo "::notice::Container scan skipped - no Dockerfile, lockfile, or container-related files changed in this PR"
+        fi
 
     - name: Compute Wiz CLI cache key
       if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != ''
@@ -647,6 +655,7 @@ runs:
       shell: bash
 
     - name: Process scan results
+      if: steps.check-changes.outputs.should_scan == 'true'
       env:
         WORKSPACE: ${{ github.workspace }}
         IMAGE_WITH_TAG: ${{ steps.docker-build.outputs.image-with-tag }}
