@@ -146,135 +146,82 @@ runs:
       with:
         fetch-depth: 2
 
-    - name: Check for container-related file changes
-      id: check-changes
+    - name: Check event type and draft status
+      id: check-event-type
       shell: bash
       env:
         PR_IS_DRAFT: ${{ github.event.pull_request.draft }}
-        GH_TOKEN: ${{ github.token }}
       run: |
-        # For schedule events, always scan (purpose is to catch drift/new CVEs)
-        if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
-          echo "Scheduled run - will scan"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-          exit 0
+        # schedule/workflow_dispatch have no changed-file context — always scan
+        if [ "$GITHUB_EVENT_NAME" = "schedule" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          echo "scan_override=always" >> $GITHUB_OUTPUT
+        # Draft PRs skip scan; it re-runs automatically when marked ready for review
+        elif [ "$PR_IS_DRAFT" = "true" ]; then
+          echo "scan_override=draft_skip" >> $GITHUB_OUTPUT
+        else
+          echo "scan_override=check_files" >> $GITHUB_OUTPUT
         fi
 
-        # For workflow_dispatch, always scan (user explicitly requested)
-        if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-          echo "Manual trigger - will scan"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
+    - name: Filter container-related file changes
+      id: filter
+      if: steps.check-event-type.outputs.scan_override == 'check_files'
+      uses: dorny/paths-filter@v4
+      with:
+        token: ${{ github.token }}
+        filters: |
+          container:
+            - 'Dockerfile'
+            - '**/*.dockerfile'
+            - '**/docker-compose*.yml'
+            - '**/docker-compose*.yaml'
+            - '**/.docker-config.json'
+            - '**/package.json'
+            - '**/package-lock.json'
+            - '**/yarn.lock'
+            - '**/pnpm-lock.yaml'
+            - '**/bun.lock'
+            - '**/Gemfile'
+            - '**/Gemfile.lock'
+            - '**/requirements.txt'
+            - '**/requirements*.txt'
+            - '**/poetry.lock'
+            - '**/Pipfile'
+            - '**/Pipfile.lock'
+            - '**/uv.lock'
+            - '**/.python-version'
+            - '**/go.mod'
+            - '**/go.sum'
+            - '**/Cargo.toml'
+            - '**/Cargo.lock'
+            - '**/composer.lock'
+            - '**/.dockerignore'
+            - '**/.nvmrc'
+            - '**/.node-version'
+            - '**/.tool-versions'
+            - '**/build.gradle'
+            - '**/build.gradle.kts'
+            - '**/pom.xml'
 
-        # For draft PRs, skip scan to reduce CI load during active development
-        # Scan will run automatically when PR is marked ready for review
-        if [ "$PR_IS_DRAFT" = "true" ]; then
-          echo "Draft PR - skipping container scan"
-          echo "should_skip=true" >> $GITHUB_OUTPUT
+    - name: Determine scan decision
+      id: check-changes
+      shell: bash
+      run: |
+        OVERRIDE="${{ steps.check-event-type.outputs.scan_override }}"
+        CONTAINER_CHANGED="${{ steps.filter.outputs.container }}"
+
+        if [ "$OVERRIDE" = "always" ]; then
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+        elif [ "$OVERRIDE" = "draft_skip" ]; then
           echo "should_scan=false" >> $GITHUB_OUTPUT
+          echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "skip_reason=draft_pr" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        echo "Checking for container-related file changes..."
-
-        # Get list of changed files based on event type
-        CHANGED_FILES=""
-        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          # Use GitHub API to get only files changed in this PR.
-          # git diff base..head includes all divergence with the base branch, which causes
-          # false-positive scan triggers on active repos where base has container-file changes
-          # unrelated to this PR.
-          CHANGED_FILES=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}/files" \
-            --jq '.[].filename' \
-            --paginate 2>/dev/null) || CHANGED_FILES=""
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "Could not fetch PR files via API, falling back to git diff"
-            BASE_SHA="${{ github.event.pull_request.base.sha }}"
-            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-            git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
-            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
-          fi
-        elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-          BASE_SHA="${{ github.event.before }}"
-          HEAD_SHA="${{ github.event.after }}"
-          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-            echo "Could not determine base SHA (possibly first push to branch), will scan to be safe"
-            echo "should_skip=false" >> $GITHUB_OUTPUT
-            echo "should_scan=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          git fetch origin "$BASE_SHA" --depth=1 2>/dev/null || true
-          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
+        elif [ "$CONTAINER_CHANGED" = "true" ]; then
+          echo "should_scan=true" >> $GITHUB_OUTPUT
+          echo "should_skip=false" >> $GITHUB_OUTPUT
         else
-          echo "Unknown event type: $GITHUB_EVENT_NAME, will scan to be safe"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        # Define patterns for container-related files
-        PATTERNS=(
-          "Dockerfile"
-          "*.dockerfile"
-          "docker-compose*.yml"
-          "docker-compose*.yaml"
-          ".docker-config.json"
-          "package-lock.json"
-          "yarn.lock"
-          "pnpm-lock.yaml"
-          "Gemfile.lock"
-          "requirements.txt"
-          "requirements*.txt"
-          "poetry.lock"
-          "Pipfile.lock"
-          "go.sum"
-          "Cargo.lock"
-          "composer.lock"
-          ".dockerignore"
-          ".node-version"
-          ".nvmrc"
-          ".python-version"
-          "build.gradle"
-          "build.gradle.kts"
-          "pom.xml"
-          "uv.lock"
-          "bun.lock"
-        )
-
-        if [ -z "$CHANGED_FILES" ]; then
-          echo "Could not determine changed files, will scan to be safe"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        echo "Changed files:"
-        echo "$CHANGED_FILES"
-
-        # Check if any changed file matches our patterns
-        FOUND_MATCH=false
-        for file in $CHANGED_FILES; do
-          for pattern in "${PATTERNS[@]}"; do
-            if [[ "$file" == *"$pattern"* ]] || [[ "$(basename "$file")" == $pattern ]]; then
-              echo "Found matching file: $file (matches pattern: $pattern)"
-              FOUND_MATCH=true
-              break 2
-            fi
-          done
-        done
-
-        if [ "$FOUND_MATCH" = true ]; then
-          echo "Container-related files changed, will scan"
-          echo "should_skip=false" >> $GITHUB_OUTPUT
-          echo "should_scan=true" >> $GITHUB_OUTPUT
-        else
-          echo "No container-related files changed, skipping scan"
-          echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "should_scan=false" >> $GITHUB_OUTPUT
+          echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "skip_reason=no_container_files" >> $GITHUB_OUTPUT
         fi
 
