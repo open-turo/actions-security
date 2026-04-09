@@ -154,17 +154,17 @@ runs:
       run: |
         # schedule/workflow_dispatch have no changed-file context — always scan
         if [ "$GITHUB_EVENT_NAME" = "schedule" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-          echo "scan_override=always" >> $GITHUB_OUTPUT
+          echo "check_mode=always" >> $GITHUB_OUTPUT
         # Draft PRs skip scan; it re-runs automatically when marked ready for review
         elif [ "$PR_IS_DRAFT" = "true" ]; then
-          echo "scan_override=draft_skip" >> $GITHUB_OUTPUT
+          echo "check_mode=draft_skip" >> $GITHUB_OUTPUT
         else
-          echo "scan_override=check_files" >> $GITHUB_OUTPUT
+          echo "check_mode=check_files" >> $GITHUB_OUTPUT
         fi
 
     - name: Filter container-related file changes
       id: filter
-      if: steps.check-event-type.outputs.scan_override == 'check_files'
+      if: steps.check-event-type.outputs.check_mode == 'check_files'
       uses: dorny/paths-filter@v4
       with:
         token: ${{ github.token }}
@@ -206,7 +206,7 @@ runs:
       id: check-changes
       shell: bash
       env:
-        OVERRIDE: ${{ steps.check-event-type.outputs.scan_override }}
+        OVERRIDE: ${{ steps.check-event-type.outputs.check_mode }}
         CONTAINER_CHANGED: ${{ steps.filter.outputs.container }}
       run: |
         if [ "$OVERRIDE" = "always" ]; then
