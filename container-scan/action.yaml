@@ -205,10 +205,10 @@ runs:
     - name: Determine scan decision
       id: check-changes
       shell: bash
+      env:
+        OVERRIDE: ${{ steps.check-event-type.outputs.scan_override }}
+        CONTAINER_CHANGED: ${{ steps.filter.outputs.container }}
       run: |
-        OVERRIDE="${{ steps.check-event-type.outputs.scan_override }}"
-        CONTAINER_CHANGED="${{ steps.filter.outputs.container }}"
-
         if [ "$OVERRIDE" = "always" ]; then
           echo "should_scan=true" >> $GITHUB_OUTPUT
           echo "should_skip=false" >> $GITHUB_OUTPUT
