@@ -317,7 +317,7 @@ runs:
 
     - name: Set up QEMU
       if: steps.check-changes.outputs.should_scan == 'true'
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@v4
 
     - name: Set up Docker Buildx
       if: steps.check-changes.outputs.should_scan == 'true'
