@@ -321,7 +321,7 @@ runs:
 
     - name: Set up Docker Buildx
       if: steps.check-changes.outputs.should_scan == 'true'
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
 
     - name: Login to Docker Hub
       if: steps.check-changes.outputs.should_scan == 'true'
