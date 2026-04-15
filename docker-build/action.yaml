@@ -113,6 +113,8 @@ runs:
         platforms: ${{ inputs.image-platform }}
         file: ${{ steps.config.outputs.dockerfile }}
         build-contexts: ${{ inputs.build-contexts }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         build-args: |
           GIT_COMMIT=${{ github.sha }}
           GITHUB_TOKEN=${{ inputs.github-token }}
