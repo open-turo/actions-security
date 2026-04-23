@@ -249,7 +249,7 @@ runs:
 
     - name: Load cached Wiz CLI if available
       if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != ''
-      uses: everpcpc/actions-cache@v2
+      uses: everpcpc/actions-cache@v3
       id: wiz-cli-cache
       with:
         bucket: ${{ inputs.s3-bucket-name }}
@@ -278,7 +278,7 @@ runs:
 
     - name: Save Wiz CLI to cache
       if: steps.check-changes.outputs.should_scan == 'true' && inputs.s3-bucket-name != '' && steps.wiz-cli-cache.outputs.cache-hit != 'true'
-      uses: everpcpc/actions-cache@v2
+      uses: everpcpc/actions-cache@v3
       with:
         bucket: ${{ inputs.s3-bucket-name }}
         path: /usr/local/bin/wizcli
