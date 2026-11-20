@@ -15,9 +15,9 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: open-turo/action-setup-tools@v3
+    - uses: actions/setup-python@v7
       with:
-        python: 3.13.2
+        python-version-file: ${{ github.action_path }}/.python-version
 
     - uses: actions/checkout@v7
       with:
