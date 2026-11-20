@@ -16,6 +16,9 @@ runs:
   using: composite
   steps:
     - uses: open-turo/action-setup-tools@v3
+      with:
+        # renovate: datasource=python-version depName=python
+        python: 3.13.18
 
     - uses: actions/checkout@v7
       with:
